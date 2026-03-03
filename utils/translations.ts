@@ -52,6 +52,7 @@ const dictionary: Record<string, Record<Language, string>> = {
   "monitoring_subtitle": { ru: "Оперативная сводка и дислокация", uz: "Tezkor hisobot va dislokatsiya" },
   "report": { ru: "Отчет", uz: "Hisobot" },
   "charts": { ru: "Графики", uz: "Grafiklar" },
+  "cargo_tab": { ru: "ГРУЗ", uz: "YUK" },
   "search_placeholder": { ru: "Поиск вагона, груза...", uz: "Vagon, yuk qidirish..." },
   "all_regions": { ru: "Все регионы", uz: "Barcha hududlar" },
   "processed_trains": { ru: "Обработано составов (Натурок)", uz: "Qayta ishlangan tarkiblar (Naturka)" },

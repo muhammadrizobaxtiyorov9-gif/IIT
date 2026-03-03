@@ -339,7 +339,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
       let isImport = (destDor === 73 || destDor === 72) && !isGalaba;
 
       if (protocol) {
-        if (protocol.type === 'import') {
+        if (protocol.type === 'qabul') {
           // Keep heuristic for column mapping, but trust protocol for row matching?
           // For now, simple logic is preserved.
         }

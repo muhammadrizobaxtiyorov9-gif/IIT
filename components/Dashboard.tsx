@@ -4,10 +4,11 @@ import { getRegionName, getCargoNameTranslated } from '../utils/translations';
 import { normalizeMgspName } from '../utils/stationUtils';
 import StatsCard from './StatsCard';
 import TransitImportReport from './TransitImportReport';
+import CargoInfographics from './CargoInfographics';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-import { TrainFront, MapPin, AlertCircle, Filter, Search, Table2, BarChart3, ChevronDown, Container, ArrowRightLeft, ChevronLeft, ChevronRight, Hash, X, CheckSquare, Square, Weight, FileSpreadsheet, CheckCircle2, Calendar, Clock, FileText, Trash2, Copy } from 'lucide-react';
+import { TrainFront, MapPin, AlertCircle, Filter, Search, Table2, BarChart3, ChevronDown, Container, ArrowRightLeft, ChevronLeft, ChevronRight, Hash, X, CheckSquare, Square, Weight, FileSpreadsheet, CheckCircle2, Calendar, Clock, FileText, Trash2, Copy, PackageOpen } from 'lucide-react';
 
 interface DashboardProps {
    stations: Station[];
@@ -112,7 +113,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
    const [selectedDestination, setSelectedDestination] = useState<string>('all');
    const [searchQuery, setSearchQuery] = useState<string>('');
    const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-   const [viewMode, setViewMode] = useState<'stats' | 'report'>('report');
+   const [viewMode, setViewMode] = useState<'stats' | 'report' | 'cargo'>('report');
 
    // Train Selection State
    const [isTrainModalOpen, setIsTrainModalOpen] = useState(false);
@@ -592,6 +593,12 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                   >
                      <BarChart3 className="w-4 h-4" /> {t('charts')}
                   </button>
+                  <button
+                     onClick={() => setViewMode('cargo')}
+                     className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${viewMode === 'cargo' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                  >
+                     <PackageOpen className="w-4 h-4" /> {t('cargo_tab')}
+                  </button>
                </div>
 
                {/* Search */}
@@ -673,6 +680,10 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
          {viewMode === 'report' ? (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                <TransitImportReport wagons={filteredWagons} lang={lang} t={t} selectedDate={selectedDate} />
+            </div>
+         ) : viewMode === 'cargo' ? (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+               <CargoInfographics wagons={filteredWagons} stations={stations} lang={lang} />
             </div>
          ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
