@@ -119,6 +119,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
    const [selectedTrains, setSelectedTrains] = useState<Set<string>>(new Set());
    const [filterEntryPoint, setFilterEntryPoint] = useState<string>('all');
    const [filterDestination, setFilterDestination] = useState<string>('all');
+   const [trainSearchQuery, setTrainSearchQuery] = useState<string>('');
 
    // Naturka and Delete Modal States
    const [viewNaturkaTrain, setViewNaturkaTrain] = useState<string | null>(null);
@@ -275,7 +276,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
       let list = trainList.filter(id => {
          const matchesEntry = filterEntryPoint === 'all' || trainEntryMap[id] === filterEntryPoint;
          const matchesDest = filterDestination === 'all' || trainStats[id].mainDestination === filterDestination;
-         return matchesEntry && matchesDest;
+         const matchesSearch = trainSearchQuery === '' || id.toLowerCase().includes(trainSearchQuery.toLowerCase());
+         return matchesEntry && matchesDest && matchesSearch;
       });
 
       // Sort by arrival date (ascending)
@@ -286,7 +288,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
       });
 
       return list;
-   }, [trainList, filterEntryPoint, filterDestination, trainEntryMap, trainStats]);
+   }, [trainList, filterEntryPoint, filterDestination, trainSearchQuery, trainEntryMap, trainStats]);
 
    const actualTrainCount = trainList.length;
 
@@ -403,6 +405,17 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                               ))}
                            </select>
                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+
+                        <div className="relative flex-1 max-w-[200px] group">
+                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                           <input
+                              type="text"
+                              placeholder={lang === 'uz' ? 'Poyezdni qidirish...' : 'Поиск поезда...'}
+                              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                              value={trainSearchQuery}
+                              onChange={(e) => setTrainSearchQuery(e.target.value)}
+                           />
                         </div>
 
                         <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">

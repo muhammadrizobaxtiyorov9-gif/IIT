@@ -402,6 +402,9 @@ export const parseStationData = (rawData: string): Station[] => {
       if (dor === 73 || country === "Узбекистан") {
         regionName = detection.regionName !== "СНГ / Россия" ? detection.regionName : "Узбекистан";
         dor = 73;
+      } else if (country === "Кыргызстан" || country === "Киргизия") {
+        regionName = "Киргизия";
+        dor = 71; // Force DOR 71 for Kyrgyzstan regardless of JSON errors
       }
 
       let id = fullCode;
