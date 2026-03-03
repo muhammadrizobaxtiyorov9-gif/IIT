@@ -73,7 +73,12 @@ const detectCountryAndRegion = (code: string, providedOtd?: number): { dor: numb
   let regionName = "СНГ / Россия";
 
   if (prefix2 === 72) {
-    dor = 73; otd = otd || 1; regionName = otd ? mapOtdToRegion(otd) : RegionName.Tashkent;
+    dor = 73;
+    if (!otd) {
+      if (prefix3 >= 727 && prefix3 <= 729) otd = 3;
+      else otd = 1;
+    }
+    regionName = mapOtdToRegion(otd);
   }
   else if (prefix2 === 73) {
     dor = 73;
@@ -368,10 +373,11 @@ export const parseStationData = (rawData: string): Station[] => {
       const isBorderPoint = item.isBorderPoint;
 
       let dor = typeof item.dor === 'number' ? item.dor : undefined;
+      const explicitOtd = typeof item.otd === 'number' ? item.otd : undefined;
       const country = item.country;
 
-      // Extract OTD/MTU regions via code prefixes
-      const detection = detectCountryAndRegion(fullCode);
+      // Extract OTD/MTU regions via code prefixes, respecting JSON OTD
+      const detection = detectCountryAndRegion(fullCode, explicitOtd);
       dor = dor !== undefined ? dor : detection.dor;
       const otd = detection.otd;
 
@@ -740,11 +746,11 @@ export function* parseOperationalDataGenerator(rawData: string, stations: Statio
       }
 
       const errorMsg = lang === 'uz'
-        ? `Poyezd sostavi (${trainIdx}) hali qabul qilinmadi (ИППВ ОТСУТСТВУЕТ), iltimos qabul qilingandan keyin kiriting`
-        : `Состав поезда (${trainIdx}) еще не принят (ИППВ ОТСУТСТВУЕТ), пожалуйста, введите после принятия`;
+        ? `Ogohlantirish: Poyezd sostavi (${trainIdx}) hali qabul qilinmadi (ИППВ ОТСУТСТВУЕТ), lekin bazaga qo'shilmoqda.`
+        : `Внимание: Состав поезда (${trainIdx}) еще не принят (ИППВ ОТСУТСТВУЕТ), но добавляется в базу.`;
 
       yield { validationError: errorMsg } as any;
-      continue;
+      // removed "continue;" to allow the parser to process the wagons anyway
     }
 
     const lines = section.split('\n');
