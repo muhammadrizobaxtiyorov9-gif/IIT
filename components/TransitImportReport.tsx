@@ -374,21 +374,25 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
         const bekPrefixes = new Set(["7473", "7474", "7475", "7476", "7477", "7478", "7479", "7480", "7481", "7483", "7484", "7485", "7486"]);
         const kudPrefixes = new Set(["7450", "7451", "7452", "7453", "7454", "7455", "7456", "7457", "7458", "7459", "7460", "7461", "7462", "7463", "7464", "7465", "7466", "7467", "7468", "7469", "7470", "7471", "7472", "7482", "7487", "7488", "7489", "9385", "9386"]);
 
-        // --- REFINED TRANSIT CLASSIFICATION (Senior Logic) ---
+        const rName = dest?.regionName?.toLowerCase() || '';
+        const isKyrgyzstan = destDor === 71 || rName.includes('кирг') || rName.includes('кырг');
+        const isTurkmenistan = destDor === 75 || rName.includes('турк');
+        const isKazakhstan = (destDor >= 66 && destDor <= 70) && !isKyrgyzstan;
+
         // Priority 1: Afghanistan (Galaba)
         if (isGalaba) {
           targetCell = row.galaba;
         }
-        // Priority 2: Kazakhstan (Dor 66-70)
-        else if (destDor >= 66 && destDor <= 70) {
+        // Priority 2: Kazakhstan (Dor 66-70 BUT not Kyrgyzstan)
+        else if (isKazakhstan) {
           targetCell = row.kazakhstan;
         }
-        // Priority 3: Turkmenistan (Dor 75)
-        else if (destDor === 75) {
+        // Priority 3: Turkmenistan (Dor 75 or Region)
+        else if (isTurkmenistan) {
           targetCell = row.turkmenistan;
         }
-        // Priority 4: Kyrgyzstan (Dor 71)
-        else if (destDor === 71) {
+        // Priority 4: Kyrgyzstan (Dor 71 or Region)
+        else if (isKyrgyzstan) {
           targetCell = row.kyrgyzstan;
         }
         // Priority 5: Tajikistan (Explicit prefixes or Dor 74 or markers)
@@ -398,7 +402,6 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           } else if (kudPrefixes.has(code4)) {
             targetCell = row.taj_kudukli;
           } else if (isBek) {
-            // If marker says Bekabad, but it's not clearly another country
             targetCell = row.taj_bekabad;
           } else {
             targetCell = row.taj_kudukli;

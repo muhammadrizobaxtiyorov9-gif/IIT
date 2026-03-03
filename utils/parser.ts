@@ -148,73 +148,89 @@ export const calculateRailwayDate = (inputDate: Date): string => {
 };
 
 /**
- * Attempts to extract a date/time stamp from the raw report.
- * PRIORITY 1: CППB line (Robust Proximity Match)
- * PRIORITY 2: Generic Header
+ * Attempts to extract a date/time stamp from the raw report in strict priority:
+ * 1. ПРМД lines (e.g. ПРМД 01.03 20-55)
+ * 2. CППB lines (e.g. CППB-69830 01.03 20-25)
+ * 3. :902 machine block headers if IPPV missing (e.g. (:902 7222 2062 6980 741 7364 1 02 03 02 32 ...)
+ * 4. Generic Header
  */
 export const extractReportDate = (text: string): Date | null => {
   if (!text) return null;
 
-  // Check first 150 lines (increased from 100 to catch headers in larger chunks)
+  // Check first 150 lines
   const lines = text.split('\n').slice(0, 150);
 
-  // 1. ROBUST CППB DATE REGEX
-  // Matches: "CППB-69830 13.02 12-14" etc.
-  // Modified to include "Ï" and "1" common in OCR garbage for "П" or "I"
+  // Regexes
+  const prmdRegex = /(?:[ПP][РP][МM][ДDОO0ТT]).*?(\d{2})[.,/](\d{2})[^\d\n]*(\d{1,2})[-:.](\d{2})/i;
   const borderDateRegex = /(?:C|С|c|с)[ПPnmIiÏï1]{2}[BВ8].{0,30}?(\d{2})[.,/](\d{2})\s+(\d{1,2})[-:.,\s](\d{2})/i;
-
-  // 2. Generic header regex: "05.02 09-39" often found near "BЦ УTИ"
+  const machine902Regex = /^\(:902\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/;
   const genericDateRegex = /(\d{2})[.,/](\d{2})\s+(\d{1,2})[-:.,](\d{2})/;
 
-  let bestMatch: RegExpMatchArray | null = null;
+  // Storage for standard parsing
+  let matchDay, matchMonth, matchHour, matchMin;
 
-  // Search Strategy:
-  for (const line of lines) {
-    let match = line.match(borderDateRegex);
-    if (match) {
-      bestMatch = match;
-      break;
-    }
-  }
-
-  if (!bestMatch) {
-    for (const line of lines) {
-      const match = line.match(genericDateRegex);
-      if (match) {
-        // Additional check: usually headers have "BЦ" or "УТИ" nearby or looks like a timestamp line
-        if (line.includes("BЦ") || line.includes("ВЦ") || line.length < 50) {
-          bestMatch = match;
-          break;
-        }
-      }
-    }
-  }
-
-  if (bestMatch) {
-    const day = parseInt(bestMatch[1], 10);
-    const month = parseInt(bestMatch[2], 10) - 1; // JS months are 0-indexed
-    const hour = parseInt(bestMatch[3], 10);
-    const minute = parseInt(bestMatch[4], 10);
+  const tryParseDate = (day: string, month: string, hour: string, minute: string): Date | null => {
+    const dDay = parseInt(day, 10);
+    const dMonth = parseInt(month, 10) - 1; // JS months are 0-indexed
+    const dHour = parseInt(hour, 10);
+    const dMin = parseInt(minute, 10);
 
     const now = new Date();
     let year = now.getFullYear();
 
-    if (month < 0 || month > 11 || day < 1 || day > 31 || hour < 0 || hour > 24 || minute < 0 || minute > 59) {
+    if (dMonth < 0 || dMonth > 11 || dDay < 1 || dDay > 31 || dHour < 0 || dHour > 24 || dMin < 0 || dMin > 59) {
       return null;
     }
 
-    if (now.getMonth() === 0 && month === 11) {
+    if (now.getMonth() === 0 && dMonth === 11) {
       year = year - 1;
     }
-    else if (now.getMonth() === 11 && month === 0) {
+    else if (now.getMonth() === 11 && dMonth === 0) {
       year = year + 1;
     }
 
-    const extractedDate = new Date(year, month, day, hour, minute);
+    const extractedDate = new Date(year, dMonth, dDay, dHour, dMin);
     if (!isNaN(extractedDate.getTime())) {
       return extractedDate;
     }
+    return null;
+  };
+
+  // PRIORITY 1: ПРМД
+  for (const line of lines) {
+    const match = line.match(prmdRegex);
+    if (match) {
+      return tryParseDate(match[1], match[2], match[3], match[4]);
+    }
   }
+
+  // PRIORITY 2: CППB
+  for (const line of lines) {
+    const match = line.match(borderDateRegex);
+    if (match) {
+      return tryParseDate(match[1], match[2], match[3], match[4]);
+    }
+  }
+
+  // PRIORITY 3: (:902 machine header (used heavily when IPPV missing)
+  for (const line of lines) {
+    const match = line.match(machine902Regex);
+    if (match) {
+      // regex matches group: 7=date, 8=month, 9=hour, 10=minute
+      return tryParseDate(match[7], match[8], match[9], match[10]);
+    }
+  }
+
+  // PRIORITY 4: Generic Header Fallback
+  for (const line of lines) {
+    const match = line.match(genericDateRegex);
+    if (match) {
+      if (line.includes("BЦ") || line.includes("ВЦ") || line.length < 50) {
+        return tryParseDate(match[1], match[2], match[3], match[4]);
+      }
+    }
+  }
+
   return null;
 };
 
@@ -676,7 +692,7 @@ export function* parseOperationalDataGenerator(rawData: string, stations: Statio
 
   // Regex for PRMD/PRMO (Priority 1) - Updated to handle station codes and variants
   // Matches: ПPMД 74452 25.02 04-14 or ПPMД 25.02 04-14
-  const prmdRegex = /(?:П[РP]M[ДDОO0ТT]).*?(\d{2})[.,/](\d{2})[^\d\n]*(\d{1,2})[-:.](\d{2})/i;
+  const prmdRegex = /(?:[ПP][РP][МM][ДDОO0ТT]).*?(\d{2})[.,/](\d{2})[^\d\n]*(\d{1,2})[-:.](\d{2})/i;
 
   // Regex for OTPR (Departure) - Priority 1 (Same as PRMD for this context)
   // Matches: OTПP 72610 10.02 05-45
