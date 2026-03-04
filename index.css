@@ -17,16 +17,18 @@
 
   body {
     font-family: var(--font-sans);
-    background-color: #F8FAFC;
-    /* Slate 50 */
-    color: #1e293b;
-    /* Slate 800 */
+    background-color: #f1f5f9;
+    /* Slate 100 */
+    color: #0f172a;
+    /* Slate 900 */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
-    /* Subtle noise texture for premium feel */
-    background-image: radial-gradient(rgba(203, 213, 225, 0.3) 1px, transparent 1px);
-    background-size: 24px 24px;
+    /* Premium subtle grid texture */
+    background-image: 
+      linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
 
   /* Premium Invisible/Minimal Scrollbar (Mac-like) */

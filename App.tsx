@@ -15,6 +15,7 @@ import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wa
 // @ts-ignore
 import mammoth from 'mammoth';
 import { logger } from './utils/logger'; // Import Logger
+import { Toaster, toast } from 'sonner';
 
 const RAW_OPERATIONAL_DATA = ``;
 
@@ -324,7 +325,8 @@ const App: React.FC = () => {
   const [wagons, setWagons] = useState<Wagon[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка...');
-  const [successToast, setSuccessToast] = useState<string | null>(null);
+  // Remove manual toast
+  // const [successToast, setSuccessToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // For Mobile
   const [isCollapsed, setIsCollapsed] = useState(false); // For Desktop (Mini Sidebar)
@@ -592,7 +594,7 @@ const App: React.FC = () => {
       if (wasModified) {
         setCustomOpData(dataToProcess);
         setLoading(false);
-        setSuccessToast(lang === 'uz' ? "Ayrim matnlar kodirovkasi to'g'rilandi. Iltimos tekshirib, 'Saqlash' tugmasini yana bir bor bosing." : "Кодировка некоторых текстов исправлена. Проверьте и нажмите 'Сохранить' еще раз.");
+        toast.success(lang === 'uz' ? "Ayrim matnlar kodirovkasi to'g'rilandi. Iltimos tekshirib, 'Saqlash' tugmasini yana bir bor bosing." : "Кодировка некоторых текстов исправлена. Проверьте и нажмите 'Сохранить' еще раз.");
         return;
       }
 
@@ -601,7 +603,7 @@ const App: React.FC = () => {
       const dates = Object.keys(groupedData).filter(d => d !== 'unknown');
 
       if (dates.length === 0 && !groupedData['unknown']) {
-        alert(lang === 'uz' ? "Ma'lumot ichidan sana topilmadi!" : "Дата в данных не найдена!");
+        toast.error(lang === 'uz' ? "Ma'lumot ichidan sana topilmadi!" : "Дата в данных не найдена!");
         setLoading(false);
         return;
       }
@@ -645,10 +647,10 @@ const App: React.FC = () => {
 
             if (!result.backendSaved) {
               console.warn(`Backend save failed for ${dateStr}: ${result.message}`);
-              alert(`${t('save_success')} (Local Only) - Backend Error: ${result.message}`);
+              toast.warning(`${t('save_success')} (Local Only) - Backend Error: ${result.message}`);
             }
           } else {
-            alert(`Failed to save ${dateStr}: ${result.message}`);
+            toast.error(`Failed to save ${dateStr}: ${result.message}`);
           }
         } else {
           // Just viewing
@@ -662,7 +664,7 @@ const App: React.FC = () => {
         allSavedWagons.push(...unknownWagons);
         if (unknownErrors.length > 0) allValidationErrors.push(...unknownErrors);
         if (shouldSave) {
-          alert(lang === 'uz' ? "Ba'zi ma'lumotlarda sana topilmadi va ular saqlanmadi." : "В некоторых данных не найдена дата, они не были сохранены.");
+          toast.warning(lang === 'uz' ? "Ba'zi ma'lumotlarda sana topilmadi va ular saqlanmadi." : "В некоторых данных не найдена дата, они не были сохранены.");
         }
       }
 
@@ -691,8 +693,7 @@ const App: React.FC = () => {
         if (allValidationErrors.length > 0) {
           setValidationError(allValidationErrors.join('\n\n'));
         } else {
-          setSuccessToast(`${t('save_success')} (${savedDates.join(', ')})`);
-          setTimeout(() => setSuccessToast(null), 5000);
+          toast.success(`${t('save_success')} (${savedDates.join(', ')})`);
         }
       } else if (allValidationErrors.length > 0) {
         setValidationError(allValidationErrors.join('\n\n'));
@@ -703,7 +704,7 @@ const App: React.FC = () => {
       if (err.message && err.message.startsWith('VALIDATION_ERROR:')) {
         setValidationError(err.message.replace('VALIDATION_ERROR:', ''));
       } else {
-        alert(t('error'));
+        toast.error(t('error'));
       }
     } finally {
       setLoading(false);
@@ -726,7 +727,7 @@ const App: React.FC = () => {
     }
 
     if (!dataToShow) {
-      alert(t('no_data'));
+      toast.warning(t('no_data'));
       return;
     }
 
@@ -742,7 +743,7 @@ const App: React.FC = () => {
       // Refresh data
       await loadDataForRange(dateRange);
     } else {
-      alert(lang === 'uz' ? "O'chirishda xatolik yuz berdi" : "Ошибка при удалении");
+      toast.error(t('error'));
     }
   };
 
@@ -854,7 +855,7 @@ const App: React.FC = () => {
           // We rely on "Save" action to parse and confirm the date strictly.
         } catch (error) {
           logger.error('Upload Process Error', error);
-          alert(t('error'));
+          toast.error(t('error'));
         } finally {
           setLoading(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
@@ -911,26 +912,11 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen bg-[#F8FAFC] font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900 overflow-hidden">
+      <Toaster richColors position="bottom-right" />
 
       {/* Admin Panel Modal */}
       {isAdminPanelOpen && (
         <AdminPanel currentUser={currentUser} onClose={() => setIsAdminPanelOpen(false)} t={t} />
-      )}
-
-      {/* Success Toast Notification */}
-      {successToast && (
-        <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-slate-700 text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in slide-in-from-right-8 fade-in duration-300 pointer-events-auto">
-          <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-            <CheckCircle className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div>
-            <h4 className="text-sm font-bold text-white mb-0.5">Muvaffaqiyatli saqlandi!</h4>
-            <p className="text-xs text-slate-400 font-medium">{successToast}</p>
-          </div>
-          <button onClick={() => setSuccessToast(null)} className="ml-2 text-slate-500 hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
       )}
 
       {/* Raw Data Modal */}

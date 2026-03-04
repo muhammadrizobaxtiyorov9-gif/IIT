@@ -5,6 +5,7 @@ import { normalizeMgspName } from '../utils/stationUtils';
 import StatsCard from './StatsCard';
 import TransitImportReport from './TransitImportReport';
 import CargoInfographics from './CargoInfographics';
+import TrainInfographics from './TrainInfographics';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
@@ -687,359 +688,134 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                <CargoInfographics wagons={filteredWagons} stations={stations} lang={lang} />
             </div>
          ) : (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               {/* Stats Cards */}
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <StatsCard
-                     title={t('total_wagons')}
-                     value={stats.total}
-                     icon={<TrainFront className="w-7 h-7" />}
-                     color="blue"
-                  />
-                  <StatsCard
-                     title={t('at_border')}
-                     value={stats.atBorder}
-                     icon={<AlertCircle className="w-7 h-7" />}
-                     color={stats.atBorder > 0 ? "red" : "green"}
-                     trend={t('attention_needed')}
-                  />
-                  <StatsCard
-                     title={t('active_regions')}
-                     value={stats.regionData.length}
-                     icon={<MapPin className="w-7 h-7" />}
-                     color="indigo"
-                  />
-               </div>
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+               <TrainInfographics wagons={filteredWagons} stations={stations} lang={lang} />
 
-               {/* Main Charts Row */}
-               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Bar Chart: Regions */}
-                  <div className="bg-white p-8 rounded-3xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100 h-[28rem] flex flex-col">
-                     <h3 className="text-lg font-bold text-slate-800 mb-6">{t('wagons_by_region')}</h3>
-                     <div className="flex-1 min-h-0">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                           <BarChart data={stats.regionData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                              <XAxis
-                                 dataKey="name"
-                                 tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
-                                 interval={0}
-                                 axisLine={false}
-                                 tickLine={false}
-                                 dy={10}
-                              />
-                              <YAxis
-                                 tick={{ fontSize: 11, fill: '#64748b' }}
-                                 axisLine={false}
-                                 tickLine={false}
-                              />
-                              <RechartsTooltip
-                                 cursor={{ fill: '#f8fafc' }}
-                                 contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                              />
-                              <Bar
-                                 dataKey="count"
-                                 fill="#3b82f6"
-                                 radius={[6, 6, 0, 0]}
-                                 barSize={40}
-                              />
-                           </BarChart>
-                        </ResponsiveContainer>
-                     </div>
-                  </div>
-
-                  {/* Pie Chart: Border vs Internal */}
-                  <div className="bg-white p-8 rounded-3xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100 h-[28rem] flex flex-col">
-                     <h3 className="text-lg font-bold text-slate-800 mb-6">{t('dislocation_status')}</h3>
-                     <div className="flex-1 min-h-0 relative">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                           <PieChart>
-                              <Pie
-                                 data={stats.borderData}
-                                 cx="50%"
-                                 cy="50%"
-                                 innerRadius={85}
-                                 outerRadius={110}
-                                 paddingAngle={5}
-                                 dataKey="value"
-                                 stroke="none"
-                              >
-                                 {stats.borderData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={index === 0 ? '#f43f5e' : '#10b981'} />
-                                 ))}
-                              </Pie>
-                              <RechartsTooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', fontSize: '12px' }} />
-                              <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} />
-                           </PieChart>
-                        </ResponsiveContainer>
-                        {/* Center Text */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-8">
-                           <span className="text-5xl font-black text-slate-900 tracking-tighter tabular-nums">{stats.total}</span>
-                           <span className="text-xs text-slate-400 uppercase tracking-widest font-bold mt-1">{lang === 'uz' ? 'Vagonlar' : 'Вагонов'}</span>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-
-               {/* Secondary Charts Row: Cargo Type */}
-               <div className="bg-white p-8 rounded-3xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100 h-96 flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-                     <Container className="w-5 h-5 text-amber-500" />
-                     {t('cargo_distribution')}
-                  </h3>
-                  <div className="flex-1 min-h-0">
-                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                        <BarChart data={stats.cargoData} layout="vertical" margin={{ left: 20 }}>
-                           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={true} vertical={false} />
-                           <XAxis type="number" hide />
-                           <YAxis
-                              dataKey="name"
-                              type="category"
-                              width={150}
-                              tick={{ fontSize: 12, fill: '#475569', fontWeight: 600 }}
-                              axisLine={false}
-                              tickLine={false}
-                           />
-                           <RechartsTooltip
-                              cursor={{ fill: '#fffbeb' }}
-                              contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 30px -5px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                           />
-                           <Bar
-                              dataKey="count"
-                              fill="#f59e0b"
-                              radius={[0, 4, 4, 0]}
-                              barSize={24}
-                           />
-                        </BarChart>
-                     </ResponsiveContainer>
-                  </div>
-               </div>
-
-               {/* Detailed Table with Pagination */}
-               <div className="bg-white rounded-3xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
-                     <h3 className="text-lg font-bold text-slate-800">{t('detailed_list')}</h3>
-                     <span className="px-3 py-1 bg-slate-50 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold shadow-sm">
-                        {filteredWagons.length} {t('records')}
-                     </span>
-                  </div>
-
-                  <div className="overflow-x-auto min-h-[500px]">
-                     <table className="w-full text-left text-sm text-slate-600 border-separate border-spacing-0">
-                        <thead className="bg-slate-50/50 text-slate-500 font-bold uppercase text-[11px] tracking-wider">
-                           <tr>
-                              <th className="px-6 py-4 w-16 text-center border-b border-slate-100 first:pl-8">№</th>
-                              <th className="px-6 py-4 border-b border-slate-100">{t('wagon_col')}</th>
-                              <th className="px-6 py-4 border-b border-slate-100">{t('train_index')}</th>
-                              <th className="px-6 py-4 border-b border-slate-100">{t('cargo_col')}</th>
-                              <th className="px-6 py-4 border-b border-slate-100">{t('weight_col')}</th>
-                              <th className="px-6 py-4 border-b border-slate-100">{t('station_col')}</th>
-                              <th className="px-6 py-4 border-b border-slate-100">{t('region_col')}</th>
-                              <th className="px-6 py-4 text-center border-b border-slate-100 last:pr-8">{t('status_col')}</th>
-                           </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                           {paginatedWagons.length > 0 ? (
-                              paginatedWagons.map((wagon, idx) => (
-                                 <tr key={`${wagon.number}-${idx}`} className="group hover:bg-slate-50/80 transition-colors duration-200">
-                                    <td className="px-6 py-4 text-center text-slate-400 font-mono text-xs border-b border-slate-50 first:pl-8">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</td>
-                                    <td className="px-6 py-4 font-mono font-bold text-blue-600 border-b border-slate-50">{wagon.number}</td>
-                                    <td className="px-6 py-4 font-mono text-xs text-slate-500 border-b border-slate-50">{wagon.trainIndex}</td>
-                                    <td className="px-6 py-4 border-b border-slate-50">
-                                       <div className="flex flex-col">
-                                          <span className="font-bold text-slate-800 text-xs">{getCargoNameTranslated(wagon.cargoCode, lang)}</span>
-                                          <span className="text-[10px] text-slate-400 font-mono mt-0.5">{wagon.cargoCode}</span>
-                                       </div>
-                                    </td>
-                                    <td className="px-6 py-4 border-b border-slate-50">
-                                       <div className="inline-flex items-center gap-1.5 font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md text-xs tabular-nums">
-                                          {wagon.cargoWeight} t
-                                       </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-slate-800 font-semibold text-xs border-b border-slate-50">
-                                       <div className="flex flex-col">
-                                          <span>{wagon.matchedStation ? wagon.matchedStation.name : <span className="text-slate-400">Not Found</span>}</span>
-                                          <span className="text-[10px] text-slate-400 font-mono mt-0.5">{wagon.stationCode}</span>
-                                       </div>
-                                    </td>
-                                    <td className="px-6 py-4 border-b border-slate-50">
-                                       {wagon.matchedStation ? (
-                                          <span className="inline-flex px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide bg-white text-slate-600 border border-slate-200 shadow-sm">
-                                             {getRegionName(wagon.matchedStation.regionName, lang).split('(')[0]}
-                                          </span>
-                                       ) : '-'}
-                                    </td>
-                                    <td className="px-6 py-4 text-center border-b border-slate-50 last:pr-8">
-                                       {wagon.matchedStation?.isBorderPoint ? (
-                                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100 ring-1 ring-rose-100/50">
-                                             {t('at_border')}
-                                          </span>
-                                       ) : (
-                                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 ring-1 ring-emerald-100/50">
-                                             {t('internal')}
-                                          </span>
-                                       )}
-                                    </td>
-                                 </tr>
-                              ))
-                           ) : (
-                              <tr>
-                                 <td colSpan={8} className="px-6 py-24 text-center">
-                                    <div className="flex flex-col items-center justify-center text-slate-400">
-                                       <div className="bg-slate-50 p-6 rounded-full mb-4">
-                                          <Search className="w-10 h-10 text-slate-300" />
-                                       </div>
-                                       <p className="text-lg font-semibold text-slate-600">{t('not_found')}</p>
-                                       <p className="text-sm text-slate-400 mt-1">{t('try_change_search')}</p>
-                                    </div>
-                                 </td>
-                              </tr>
-                           )}
-                        </tbody>
-                     </table>
-                  </div>
-
-                  {/* Pagination Controls */}
-                  {totalPages > 1 && (
-                     <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                        <div className="text-xs text-slate-500 font-medium">
-                           {t('showing')} {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredWagons.length)} {t('of')} {filteredWagons.length}
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <button
-                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                              disabled={currentPage === 1}
-                              className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                           >
-                              <ChevronLeft className="w-4 h-4" />
-                           </button>
-                           <span className="text-xs font-bold text-slate-700 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm">
-                              {currentPage} / {totalPages}
-                           </span>
-                           <button
-                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                              disabled={currentPage === totalPages}
-                              className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-blue-600 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                           >
-                              <ChevronRight className="w-4 h-4" />
-                           </button>
-                        </div>
-                     </div>
-                  )}
-               </div>
             </div>
          )}
+
+
+
+
+
+
 
          {/* Naturka Modal */}
-         {viewNaturkaTrain && (
-            <div
-               className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xl animate-in fade-in duration-200"
-               onClick={() => setViewNaturkaTrain(null)}
-            >
+         {
+            viewNaturkaTrain && (
                <div
-                  className="bg-white rounded-3xl shadow-2xl w-full max-w-7xl flex flex-col h-[90vh] animate-in zoom-in-95 duration-300 border border-white/20"
-                  onClick={(e) => e.stopPropagation()}
+                  className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xl animate-in fade-in duration-200"
+                  onClick={() => setViewNaturkaTrain(null)}
                >
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-3xl">
-                     <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-blue-500" />
-                        {lang === 'uz' ? "Poyezd naturkasi" : "Натурка поезда"}
-                     </h3>
-                     <button onClick={() => setViewNaturkaTrain(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                        <X className="w-5 h-5 text-slate-500" />
-                     </button>
-                  </div>
-                  <div className="p-6 flex-1 overflow-auto bg-[#1e293b] custom-scrollbar">
-                     <pre className="font-mono text-xs text-green-400 leading-relaxed whitespace-pre-wrap font-medium">
-                        {generateNaturkaText(viewNaturkaTrain)}
-                     </pre>
-                  </div>
-                  <div className="p-6 border-t border-slate-100 bg-white rounded-b-3xl flex justify-end gap-3">
-                     <button
-                        onClick={() => {
-                           const text = generateNaturkaText(viewNaturkaTrain);
-                           navigator.clipboard.writeText(text);
-                           setSuccessToast(lang === 'uz' ? "Nusxa olindi" : "Скопировано");
-                           setTimeout(() => setSuccessToast(null), 3000);
-                        }}
-                        className="px-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all flex items-center gap-2"
-                     >
-                        <Copy className="w-4 h-4" />
-                        {lang === 'uz' ? "Nusxa olish" : "Копировать"}
-                     </button>
-                     <button
-                        onClick={() => setViewNaturkaTrain(null)}
-                        className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95"
-                     >
-                        {t('close')}
-                     </button>
+                  <div
+                     className="bg-white rounded-3xl shadow-2xl w-full max-w-7xl flex flex-col h-[90vh] animate-in zoom-in-95 duration-300 border border-white/20"
+                     onClick={(e) => e.stopPropagation()}
+                  >
+                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-3xl">
+                        <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                           <FileText className="w-5 h-5 text-blue-500" />
+                           {lang === 'uz' ? "Poyezd naturkasi" : "Натурка поезда"}
+                        </h3>
+                        <button onClick={() => setViewNaturkaTrain(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                           <X className="w-5 h-5 text-slate-500" />
+                        </button>
+                     </div>
+                     <div className="p-6 flex-1 overflow-auto bg-[#1e293b] custom-scrollbar">
+                        <pre className="font-mono text-xs text-green-400 leading-relaxed whitespace-pre-wrap font-medium">
+                           {generateNaturkaText(viewNaturkaTrain)}
+                        </pre>
+                     </div>
+                     <div className="p-6 border-t border-slate-100 bg-white rounded-b-3xl flex justify-end gap-3">
+                        <button
+                           onClick={() => {
+                              const text = generateNaturkaText(viewNaturkaTrain);
+                              navigator.clipboard.writeText(text);
+                              setSuccessToast(lang === 'uz' ? "Nusxa olindi" : "Скопировано");
+                              setTimeout(() => setSuccessToast(null), 3000);
+                           }}
+                           className="px-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all flex items-center gap-2"
+                        >
+                           <Copy className="w-4 h-4" />
+                           {lang === 'uz' ? "Nusxa olish" : "Копировать"}
+                        </button>
+                        <button
+                           onClick={() => setViewNaturkaTrain(null)}
+                           className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95"
+                        >
+                           {t('close')}
+                        </button>
+                     </div>
                   </div>
                </div>
-            </div>
-         )}
+            )
+         }
 
          {/* Delete Confirmation Modal */}
-         {deleteConfirmTrain && (
-            <div
-               className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xl animate-in fade-in duration-200"
-               onClick={() => setDeleteConfirmTrain(null)}
-            >
+         {
+            deleteConfirmTrain && (
                <div
-                  className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-100 transform transition-all scale-100"
-                  onClick={(e) => e.stopPropagation()}
+                  className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xl animate-in fade-in duration-200"
+                  onClick={() => setDeleteConfirmTrain(null)}
                >
-                  <div className="flex items-center gap-3 mb-4">
-                     <div className="p-3 rounded-full bg-rose-100 text-rose-600">
-                        <AlertCircle className="w-6 h-6" />
+                  <div
+                     className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-100 transform transition-all scale-100"
+                     onClick={(e) => e.stopPropagation()}
+                  >
+                     <div className="flex items-center gap-3 mb-4">
+                        <div className="p-3 rounded-full bg-rose-100 text-rose-600">
+                           <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800">
+                           {lang === 'uz' ? "Poyezdni o'chirish" : "Удалить поезд"}
+                        </h3>
                      </div>
-                     <h3 className="text-lg font-bold text-slate-800">
-                        {lang === 'uz' ? "Poyezdni o'chirish" : "Удалить поезд"}
-                     </h3>
-                  </div>
 
-                  <p className="text-sm text-slate-600 mb-6 leading-relaxed">
-                     {lang === 'uz'
-                        ? `Siz rostdan ham ${deleteConfirmTrain.trim()} indeksli poyezdni o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`
-                        : `Вы действительно хотите удалить поезд с индексом ${deleteConfirmTrain.trim()}? Это действие нельзя отменить.`}
-                  </p>
+                     <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+                        {lang === 'uz'
+                           ? `Siz rostdan ham ${deleteConfirmTrain.trim()} indeksli poyezdni o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`
+                           : `Вы действительно хотите удалить поезд с индексом ${deleteConfirmTrain.trim()}? Это действие нельзя отменить.`}
+                     </p>
 
-                  <div className="flex justify-end gap-3">
-                     <button
-                        onClick={() => setDeleteConfirmTrain(null)}
-                        className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-bold transition-colors"
-                     >
-                        {t('cancel')}
-                     </button>
-                     <button
-                        onClick={() => {
-                           if (onDeleteTrain) onDeleteTrain(deleteConfirmTrain);
-                           setDeleteConfirmTrain(null);
-                        }}
-                        className="px-4 py-2 text-white bg-rose-600 hover:bg-rose-700 rounded-xl text-sm font-bold transition-colors flex items-center gap-2"
-                     >
-                        <Trash2 className="w-4 h-4" />
-                        {t('delete')}
-                     </button>
+                     <div className="flex justify-end gap-3">
+                        <button
+                           onClick={() => setDeleteConfirmTrain(null)}
+                           className="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-bold transition-colors"
+                        >
+                           {t('cancel')}
+                        </button>
+                        <button
+                           onClick={() => {
+                              if (onDeleteTrain) onDeleteTrain(deleteConfirmTrain);
+                              setDeleteConfirmTrain(null);
+                           }}
+                           className="px-4 py-2 text-white bg-rose-600 hover:bg-rose-700 rounded-xl text-sm font-bold transition-colors flex items-center gap-2"
+                        >
+                           <Trash2 className="w-4 h-4" />
+                           {t('delete')}
+                        </button>
+                     </div>
                   </div>
                </div>
-            </div>
-         )}
+            )
+         }
 
          {/* Local Success Toast */}
-         {successToast && (
-            <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-slate-700 text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in slide-in-from-right-8 fade-in duration-300">
-               <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+         {
+            successToast && (
+               <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-slate-700 text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in slide-in-from-right-8 fade-in duration-300">
+                  <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                     <CheckCircle className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                     <h4 className="text-sm font-bold text-white mb-0.5">{successToast}</h4>
+                  </div>
+                  <button onClick={() => setSuccessToast(null)} className="ml-2 text-slate-500 hover:text-white transition-colors">
+                     <X className="w-5 h-5" />
+                  </button>
                </div>
-               <div>
-                  <h4 className="text-sm font-bold text-white mb-0.5">{successToast}</h4>
-               </div>
-               <button onClick={() => setSuccessToast(null)} className="ml-2 text-slate-500 hover:text-white transition-colors">
-                  <X className="w-5 h-5" />
-               </button>
-            </div>
-         )}
-      </div>
+            )
+         }
+      </div >
    );
 };
 
