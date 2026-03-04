@@ -1022,7 +1022,7 @@ export function* parseOperationalDataGenerator(rawData: string, stations: Statio
           destinationStation: matchedStation.name,
           matchedStation,
           entryPoint: currentEntryPoint,
-          trainIndex: currentTrainIndex || "Неопознанный состав",
+          trainIndex: (currentTrainIndex || "Неопознанный состав").replace(/\s*\[.*?_MARKER\]/g, ''),
           arrivalDate: currentTrainArrivalDate,
           rawBlock: section.trim(),
           routeVerification
@@ -1068,7 +1068,7 @@ export const rehydrateWagons = (wagons: any[], stations: Station[], sections: st
       destinationStation: matchedStation.name,
       matchedStation,
       entryPoint,
-      trainIndex: w.trainIndex || w.ti || "Unknown",
+      trainIndex: (w.trainIndex || w.ti || "Unknown").replace(/\s*\[.*?_MARKER\]/g, ''),
       rawBlock: w.rawBlock || w.rb || (w.si !== undefined ? sections[w.si] : ""),
       arrivalDate: (() => {
         const rawDate = w.arrivalDate || w.ad;

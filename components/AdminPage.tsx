@@ -289,7 +289,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
       else if (modalState.action === 'delete') {
         const date = modalState.targetId;
         // Attempt Server Delete
-        const result = await deleteReport(date);
+        const result = await deleteReport(date, currentUser);
 
         if (result.success) {
           // Subscription updates list automatically for Firebase
@@ -312,7 +312,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
       }
       else if (modalState.action === 'force-delete') {
         const date = modalState.targetId;
-        await deleteReport(date); // Force local
+        await deleteReport(date, currentUser); // Force local
         setArchivedReports(prev => prev.filter(r => r.date !== date));
         closeModal();
       }

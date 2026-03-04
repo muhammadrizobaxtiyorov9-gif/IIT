@@ -364,7 +364,7 @@ export const deleteTrainFromReport = async (date: string, trainIndex: string): P
   }
 };
 
-export const deleteReport = async (date: string): Promise<{ success: boolean, message?: string }> => {
+export const deleteReport = async (date: string, username?: string): Promise<{ success: boolean, message?: string }> => {
   const cleanDate = date.trim();
 
   try {
@@ -373,6 +373,9 @@ export const deleteReport = async (date: string): Promise<{ success: boolean, me
       if (!res.ok) throw new Error("Backend delete failed");
     } else if (db) {
       await withTimeout(deleteDoc(doc(db, "reports", cleanDate)));
+    }
+    if (username) {
+      logSystemAction('DATA_DELETE', username, `Deleted report for date ${cleanDate}`);
     }
     notifyChange('reports');
     return { success: true };

@@ -14,7 +14,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
+  // Log filtering
+  const [selectedLogDate, setSelectedLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
   // Form State
   const [isAdding, setIsAdding] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -68,7 +71,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="bg-slate-900 w-full max-w-5xl h-[80vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
-        
+
         {/* Header */}
         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-slate-800/50">
           <div>
@@ -89,18 +92,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
         <div className="flex border-b border-white/10 bg-slate-800/30">
           <button
             onClick={() => setActiveTab('users')}
-            className={`px-6 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'users' ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`px-6 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'users' ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <User className="w-4 h-4" />
             Foydalanuvchilar
           </button>
           <button
             onClick={() => setActiveTab('logs')}
-            className={`px-6 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'logs' ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-white'
-            }`}
+            className={`px-6 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'logs' ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-white'
+              }`}
           >
             <Activity className="w-4 h-4" />
             Tizim Tarixi (Logs)
@@ -212,18 +213,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
                                 await updateAdmin(admin.username, { role: newRole }, currentUser.username);
                                 loadData();
                               }}
-                              className={`bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-xs font-medium focus:ring-2 focus:ring-indigo-500 ${
-                                admin.role === 'superadmin' ? 'text-purple-400' : admin.role === 'admin' ? 'text-blue-400' : 'text-emerald-400'
-                              }`}
+                              className={`bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-xs font-medium focus:ring-2 focus:ring-indigo-500 ${admin.role === 'superadmin' ? 'text-purple-400' : admin.role === 'admin' ? 'text-blue-400' : 'text-emerald-400'
+                                }`}
                             >
                               <option value="user">User</option>
                               <option value="admin">Admin</option>
                               <option value="superadmin">Super Admin</option>
                             </select>
                           ) : (
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              admin.role === 'superadmin' ? 'bg-purple-500/10 text-purple-400' : admin.role === 'admin' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
-                            }`}>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${admin.role === 'superadmin' ? 'bg-purple-500/10 text-purple-400' : admin.role === 'admin' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
+                              }`}>
                               {admin.role || 'admin'}
                             </span>
                           )}
@@ -255,6 +254,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
             </div>
           ) : (
             <div className="space-y-4">
+              <div className="flex justify-between items-center mb-4 bg-slate-800/30 p-4 rounded-xl border border-white/5">
+                <div>
+                  <h3 className="text-white font-medium">Tizim Tarixi (Logs)</h3>
+                  <p className="text-xs text-slate-400">Tizimdagi barcha amallar tarixi ({selectedLogDate})</p>
+                </div>
+                <div>
+                  <input
+                    type="date"
+                    value={selectedLogDate}
+                    onChange={(e) => setSelectedLogDate(e.target.value)}
+                    className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
               <div className="bg-slate-800/30 rounded-xl border border-white/5 overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-800/50 text-slate-400 uppercase text-xs">
@@ -266,29 +280,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {logs.map((log) => (
-                      <tr key={log.id} className="hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 text-slate-400 whitespace-nowrap">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-white font-medium">{log.username}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            log.action === 'LOGIN' ? 'bg-green-500/10 text-green-400' :
-                            log.action === 'DATA_UPLOAD' ? 'bg-blue-500/10 text-blue-400' :
-                            log.action === 'DATA_DELETE' ? 'bg-red-500/10 text-red-400' :
-                            'bg-slate-500/10 text-slate-400'
-                          }`}>
-                            {log.action}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-slate-300">
-                          {log.details}
-                        </td>
-                      </tr>
-                    ))}
+                    {logs
+                      .filter(log => new Date(log.timestamp).toISOString().split('T')[0] === selectedLogDate)
+                      .map((log) => (
+                        <tr key={log.id} className="hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 text-slate-400 whitespace-nowrap">
+                            {new Date(log.timestamp).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-white font-medium">{log.username}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${log.action === 'LOGIN' ? 'bg-green-500/10 text-green-400' :
+                                log.action === 'DATA_UPLOAD' ? 'bg-blue-500/10 text-blue-400' :
+                                  log.action === 'DATA_DELETE' ? 'bg-red-500/10 text-red-400' :
+                                    'bg-slate-500/10 text-slate-400'
+                              }`}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-300">
+                            {log.details}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
