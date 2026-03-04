@@ -11,7 +11,7 @@ import HomePage from './components/HomePage';
 import AdminPage from './components/AdminPage';
 import { LoginPage } from './components/LoginPage';
 import { AdminPanel } from './components/AdminPanel';
-import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield } from 'lucide-react';
+import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle } from 'lucide-react';
 // @ts-ignore
 import mammoth from 'mammoth';
 import { logger } from './utils/logger'; // Import Logger
@@ -324,7 +324,7 @@ const App: React.FC = () => {
   const [wagons, setWagons] = useState<Wagon[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка...');
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin'>('home');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // For Mobile
   const [isCollapsed, setIsCollapsed] = useState(false); // For Desktop (Mini Sidebar)
@@ -556,8 +556,48 @@ const App: React.FC = () => {
     setLoadingStatus(t('processing'));
 
     try {
+      let dataToProcess = rawData;
+      let wasModified = false;
+
+      // Auto-Detect CP866/Win1251 text that was incorrectly pasted as UTF-8 (Mojibake)
+      // We check block by block so mixed UTF-8 and CP866 text doesn't corrupt each other.
+      const blockSeparator = "\n\n--- FILE SPLIT ---\n\n";
+      const mainBlocks = dataToProcess.split(blockSeparator);
+
+      const processedBlocks = await Promise.all(mainBlocks.map(async (block) => {
+        // Sub-split by double newlines to handle manually concatenated reports
+        const subBlocks = block.split('\n\n');
+        const processedSubBlocks = await Promise.all(subBlocks.map(async (subBlock) => {
+          if (!subBlock.trim()) return subBlock;
+
+          const hasCyrillic = /[а-яА-ЯёЁ]/.test(subBlock);
+          const hasGarbagePattern =
+            subBlock.includes('CÏÏB') ||
+            subBlock.includes('ÑÏÏÂ') ||
+            subBlock.includes('CÏÏÂ') ||
+            subBlock.includes('âîãîí') ||
+            (/[\u0080-\u00FF]/.test(subBlock) && !hasCyrillic);
+
+          if (hasGarbagePattern && !hasCyrillic) {
+            wasModified = true;
+            return await cleanDataWithAI(subBlock);
+          }
+          return subBlock;
+        }));
+        return processedSubBlocks.join('\n\n');
+      }));
+
+      dataToProcess = processedBlocks.join(blockSeparator);
+
+      if (wasModified) {
+        setCustomOpData(dataToProcess);
+        setLoading(false);
+        setSuccessToast(lang === 'uz' ? "Ayrim matnlar kodirovkasi to'g'rilandi. Iltimos tekshirib, 'Saqlash' tugmasini yana bir bor bosing." : "Кодировка некоторых текстов исправлена. Проверьте и нажмите 'Сохранить' еще раз.");
+        return;
+      }
+
       // 1. Group Raw Data by Date (Split multi-date uploads)
-      const groupedData = groupDataByDate(rawData);
+      const groupedData = groupDataByDate(dataToProcess);
       const dates = Object.keys(groupedData).filter(d => d !== 'unknown');
 
       if (dates.length === 0 && !groupedData['unknown']) {
@@ -651,7 +691,8 @@ const App: React.FC = () => {
         if (allValidationErrors.length > 0) {
           setValidationError(allValidationErrors.join('\n\n'));
         } else {
-          alert(`${t('save_success')} (${savedDates.join(', ')})`);
+          setSuccessToast(`${t('save_success')} (${savedDates.join(', ')})`);
+          setTimeout(() => setSuccessToast(null), 5000);
         }
       } else if (allValidationErrors.length > 0) {
         setValidationError(allValidationErrors.join('\n\n'));
@@ -705,28 +746,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAiCleanup = async () => {
-    if (!customOpData.trim()) return;
-    setIsAnalyzing(true);
-    try {
-      // 1. Try simple heuristic fix first (CP866/Win1251 -> UTF8)
-      // Many times "garbage" is just Win1251 bytes read as UTF-8 or similar.
-      // Since we don't have raw bytes here (browser already decoded it), 
-      // we can try to "reverse" common mojibake patterns using the AI service 
-      // OR just send it to AI to "make it readable".
 
-      // The user specifically asked for "CP866 (yoki Windows-1251) kodirovkadan UTF-8 ga konvertatsiya".
-      // We will use the AI service to do this "smartly".
-
-      const cleanedData = await cleanDataWithAI(customOpData);
-      setCustomOpData(cleanedData);
-    } catch (error) {
-      logger.error('AI Service Error', error);
-      alert("AI Error: " + (error as Error).message);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   // --- TRAIN COUNTING LOGIC (SMART DEDUPLICATION) ---
   const trainCount = useMemo(() => {
@@ -771,37 +791,29 @@ const App: React.FC = () => {
         }
       }
       const buffer = await file.arrayBuffer();
-      const decoderUtf8 = new TextDecoder('utf-8');
-      const textUtf8 = decoderUtf8.decode(buffer);
 
-      // Detection for old encodings (Windows-1251 or IBM866/CP866)
-      // Railway data often uses CP866 (DOS) or Win1251.
-      const hasGarbagePattern =
-        textUtf8.includes('CÏÏB') ||
-        textUtf8.includes('C\u00CF\u00CFB') ||
-        textUtf8.includes('ÑÏÏÂ') ||
-        textUtf8.includes('CÏÏÂ') ||
-        textUtf8.includes('âîãîí'); // Common garbled 'vagon' in Win1251 viewed as UTF8
+      try {
+        // 1. Try strict UTF-8 decoding. If the file contains invalid UTF-8 bytes (like CP866),
+        // fatal: true will cause it to throw an error immediately, allowing fallback.
+        const decoderUtf8 = new TextDecoder('utf-8', { fatal: true });
+        return decoderUtf8.decode(buffer);
+      } catch (e) {
+        // 2. Not valid UTF-8. Try legacy Cyrillic encodings.
+        const decoderCP866 = new TextDecoder('ibm866');
+        const textCP866 = decoderCP866.decode(buffer);
 
-      const hasCyrillic = /[а-яА-ЯёЁ]/.test(textUtf8);
-      const hasExtendedAscii = /[\u0080-\u00FF]/.test(textUtf8);
+        const decoderWin1251 = new TextDecoder('windows-1251');
+        const textWin1251 = decoderWin1251.decode(buffer);
 
-      if (hasGarbagePattern || (!hasCyrillic && hasExtendedAscii)) {
-        try {
-          // Try Windows-1251 first as it's most common for "old" desktop apps
-          const decoderWin1251 = new TextDecoder('windows-1251');
-          const textWin = decoderWin1251.decode(buffer);
+        // Determine which one is more likely correct by counting valid Cyrillic letters
+        const count866 = (textCP866.match(/[а-яА-ЯёЁ]/g) || []).length;
+        const count1251 = (textWin1251.match(/[а-яА-ЯёЁ]/g) || []).length;
 
-          if (/[а-яА-ЯёЁ]/.test(textWin)) return textWin;
-
-          // Fallback to IBM866 (DOS Cyrillic) - very common in older railway terminals
-          const decoderCP866 = new TextDecoder('ibm866');
-          return decoderCP866.decode(buffer);
-        } catch (e) {
-          return textUtf8;
+        if (count1251 > count866) {
+          return textWin1251;
         }
+        return textCP866;
       }
-      return textUtf8;
     } catch (e) {
       logger.error('File Read Error', e);
       throw e;
@@ -903,6 +915,22 @@ const App: React.FC = () => {
       {/* Admin Panel Modal */}
       {isAdminPanelOpen && (
         <AdminPanel currentUser={currentUser} onClose={() => setIsAdminPanelOpen(false)} t={t} />
+      )}
+
+      {/* Success Toast Notification */}
+      {successToast && (
+        <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-slate-700 text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in slide-in-from-right-8 fade-in duration-300 pointer-events-auto">
+          <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-white mb-0.5">Muvaffaqiyatli saqlandi!</h4>
+            <p className="text-xs text-slate-400 font-medium">{successToast}</p>
+          </div>
+          <button onClick={() => setSuccessToast(null)} className="ml-2 text-slate-500 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       )}
 
       {/* Raw Data Modal */}
@@ -1184,18 +1212,22 @@ const App: React.FC = () => {
                       <div className="p-10 space-y-12">
                         {/* Drag and Drop Area */}
                         <div
-                          className={`group relative border-2 border-dashed rounded-[2rem] p-16 text-center transition-all duration-300 cursor-pointer ${isDragging ? 'border-blue-500 bg-blue-50/30 scale-[1.02] shadow-xl shadow-blue-500/10' : 'border-slate-200 bg-slate-50/20 hover:border-blue-500 hover:bg-blue-50/10'}`}
+                          className={`group relative border-2 border-dashed rounded-2xl p-6 transition-all duration-300 cursor-pointer flex flex-col md:flex-row items-center justify-between gap-4 ${isDragging ? 'border-blue-500 bg-blue-50/30 scale-[1.01] shadow-xl shadow-blue-500/10' : 'border-slate-200 bg-slate-50/20 hover:border-blue-500 hover:bg-blue-50/10'}`}
                           onClick={() => fileInputRef.current?.click()}
                           onDragOver={handleDragOver}
                           onDragLeave={handleDragLeave}
                           onDrop={handleDrop}
                         >
-                          <div className={`w-24 h-24 bg-white rounded-[1.5rem] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] border border-slate-100 flex items-center justify-center mx-auto mb-6 transition-all duration-300 ${isDragging ? 'scale-110 shadow-blue-500/20 -translate-y-2' : 'group-hover:scale-110 group-hover:shadow-blue-500/20 group-hover:-translate-y-2'}`}>
-                            <FileUp className={`w-10 h-10 transition-colors ${isDragging ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
+                          <div className="flex items-center gap-4 text-left w-full">
+                            <div className={`w-14 h-14 bg-white rounded-xl shadow-sm border border-slate-100 flex-shrink-0 flex items-center justify-center transition-all duration-300 ${isDragging ? 'shadow-blue-500/20' : 'group-hover:shadow-blue-500/20'}`}>
+                              <FileUp className={`w-6 h-6 transition-colors ${isDragging ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-800 tracking-tight">{isDragging ? (lang === 'uz' ? 'Fayllarni shu yerga tashlang' : 'Отпустите файлы здесь') : t('drag_files')}</h3>
+                              <p className="text-xs text-slate-400 font-medium">{t('support_files')}</p>
+                            </div>
                           </div>
-                          <h3 className="text-2xl font-bold text-slate-800 mb-2 tracking-tight">{isDragging ? (lang === 'uz' ? 'Fayllarni shu yerga tashlang' : 'Отпустите файлы здесь') : t('drag_files')}</h3>
-                          <p className="text-sm text-slate-400 font-medium mb-8">{t('support_files')}</p>
-                          <button className={`px-8 py-3 bg-white border rounded-xl text-sm font-bold shadow-sm transition-all ${isDragging ? 'border-blue-200 text-blue-600' : 'border-slate-200 text-slate-700 group-hover:border-blue-200 group-hover:text-blue-600'}`}>
+                          <button className={`px-6 py-2.5 flex-shrink-0 bg-white border rounded-xl text-sm font-bold shadow-sm transition-all ${isDragging ? 'border-blue-200 text-blue-600' : 'border-slate-200 text-slate-700 group-hover:border-blue-200 group-hover:text-blue-600'}`}>
                             {t('choose_files')}
                           </button>
                           <input type="file" multiple ref={fileInputRef} className="hidden" accept=".txt,.log,.csv,.docx,.doc" onChange={handleFileUpload} />
@@ -1205,12 +1237,9 @@ const App: React.FC = () => {
                         <div className="relative">
                           <div className="flex justify-between items-end mb-4">
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">{t('manual_input')}</label>
-                            <button onClick={handleAiCleanup} disabled={isAnalyzing} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border shadow-sm ${isAnalyzing ? 'bg-indigo-50 text-indigo-400 border-indigo-100 cursor-not-allowed' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 hover:shadow-indigo-100'}`}>
-                              {isAnalyzing ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> {t('processing')}...</> : <><Wand2 className="w-3.5 h-3.5" /> {t('ai_cleanup')}</>}
-                            </button>
                           </div>
                           <textarea
-                            className="w-full h-80 p-6 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm text-slate-700 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all resize-none shadow-inner leading-relaxed"
+                            className="w-full h-[500px] p-6 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm text-slate-700 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all resize-none shadow-inner leading-relaxed"
                             value={customOpData}
                             onChange={(e) => setCustomOpData(e.target.value)}
                             placeholder={t('paste_here')}

@@ -8,7 +8,7 @@ import CargoInfographics from './CargoInfographics';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-import { TrainFront, MapPin, AlertCircle, Filter, Search, Table2, BarChart3, ChevronDown, Container, ArrowRightLeft, ChevronLeft, ChevronRight, Hash, X, CheckSquare, Square, Weight, FileSpreadsheet, CheckCircle2, Calendar, Clock, FileText, Trash2, Copy, PackageOpen } from 'lucide-react';
+import { TrainFront, MapPin, AlertCircle, Filter, Search, Table2, BarChart3, ChevronDown, Container, ArrowRightLeft, ChevronLeft, ChevronRight, Hash, X, CheckSquare, Square, Weight, FileSpreadsheet, CheckCircle2, Calendar, Clock, FileText, Trash2, Copy, PackageOpen, CheckCircle } from 'lucide-react';
 
 interface DashboardProps {
    stations: Station[];
@@ -31,7 +31,7 @@ const getTrainStats = (wagons: Wagon[], stations: Station[]) => {
 
    wagons.forEach(w => {
       const rawIdx = w.trainIndex || "Unknown";
-      const idx = rawIdx.replace(/\[.*?_MARKER\]/g, '').trim();
+      const idx = rawIdx.trim();
 
       if (!tempStats[idx]) {
          tempStats[idx] = { count: 0, weight: 0, destinations: {}, arrivalDate: undefined };
@@ -125,6 +125,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
    // Naturka and Delete Modal States
    const [viewNaturkaTrain, setViewNaturkaTrain] = useState<string | null>(null);
    const [deleteConfirmTrain, setDeleteConfirmTrain] = useState<string | null>(null);
+   const [successToast, setSuccessToast] = useState<string | null>(null);
 
    // Pagination State
    const [currentPage, setCurrentPage] = useState(1);
@@ -142,7 +143,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
       return wagons.filter(w => {
          // 1. Train Selection Filter
          if (selectedTrains.size > 0) {
-            const normalizedIdx = (w.trainIndex || "").replace(/\[.*?_MARKER\]/g, '').trim();
+            const normalizedIdx = (w.trainIndex || "").trim();
             if (!normalizedIdx || !selectedTrains.has(normalizedIdx)) {
                return false;
             }
@@ -236,7 +237,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
       const map: Record<string, string> = {};
       wagons.forEach(w => {
          if (w.trainIndex) {
-            const normalizedIdx = w.trainIndex.replace(/\[.*?_MARKER\]/g, '').trim();
+            const normalizedIdx = w.trainIndex.trim();
             const mgspName = normalizeMgspName(w.entryPoint, w.trainIndex);
             if (mgspName !== "ПРОЧИЕ") {
                map[normalizedIdx] = mgspName;
@@ -316,7 +317,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
       // Extract the core index part (A+B+C) for robust matching
       const getCoreIndex = (idx: string) => {
          const m = idx.replace(/\s+/g, '').match(/\(\d+\+\d+\+\d+\)/);
-         return m ? m[0] : idx.replace(/\s+/g, '').replace(/\[.*?_MARKER\]/g, '').trim();
+         return m ? m[0] : idx.replace(/\s+/g, '').trim();
       };
 
       const targetCore = getCoreIndex(trainIndex);
@@ -481,7 +482,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                                                    #{index + 1}
                                                 </span>
                                                 <div className={`text-sm font-bold font-mono truncate ${isSelected ? 'text-white' : 'text-slate-700'}`} title={trainIdx}>
-                                                   {trainIdx.replace(/\[.*?_MARKER\]/g, '').trim()}
+                                                   {trainIdx.trim()}
                                                 </div>
                                              </div>
                                              <div className={`text-[10px] font-bold mt-0.5 flex items-center gap-1.5 ${isSelected ? 'text-blue-200' : 'text-slate-500'}`}>
@@ -958,7 +959,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                         onClick={() => {
                            const text = generateNaturkaText(viewNaturkaTrain);
                            navigator.clipboard.writeText(text);
-                           alert(lang === 'uz' ? "Nusxa olindi" : "Скопировано");
+                           setSuccessToast(lang === 'uz' ? "Nusxa olindi" : "Скопировано");
+                           setTimeout(() => setSuccessToast(null), 3000);
                         }}
                         className="px-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all flex items-center gap-2"
                      >
@@ -997,8 +999,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
 
                   <p className="text-sm text-slate-600 mb-6 leading-relaxed">
                      {lang === 'uz'
-                        ? `Siz rostdan ham ${deleteConfirmTrain.replace(/\[.*?_MARKER\]/g, '').trim()} indeksli poyezdni o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`
-                        : `Вы действительно хотите удалить поезд с индексом ${deleteConfirmTrain.replace(/\[.*?_MARKER\]/g, '').trim()}? Это действие нельзя отменить.`}
+                        ? `Siz rostdan ham ${deleteConfirmTrain.trim()} indeksli poyezdni o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.`
+                        : `Вы действительно хотите удалить поезд с индексом ${deleteConfirmTrain.trim()}? Это действие нельзя отменить.`}
                   </p>
 
                   <div className="flex justify-end gap-3">
@@ -1020,6 +1022,21 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                      </button>
                   </div>
                </div>
+            </div>
+         )}
+
+         {/* Local Success Toast */}
+         {successToast && (
+            <div className="fixed bottom-6 right-6 z-[300] bg-slate-900 border border-slate-700 text-white px-6 py-4 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center gap-4 animate-in slide-in-from-right-8 fade-in duration-300">
+               <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+               </div>
+               <div>
+                  <h4 className="text-sm font-bold text-white mb-0.5">{successToast}</h4>
+               </div>
+               <button onClick={() => setSuccessToast(null)} className="ml-2 text-slate-500 hover:text-white transition-colors">
+                  <X className="w-5 h-5" />
+               </button>
             </div>
          )}
       </div>

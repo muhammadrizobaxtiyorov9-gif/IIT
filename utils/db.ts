@@ -1,9 +1,9 @@
 
 import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, orderBy, 
+import {
+  getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, orderBy,
   enableIndexedDbPersistence, runTransaction, setLogLevel,
-  DocumentSnapshot, QuerySnapshot, DocumentData 
+  DocumentSnapshot, QuerySnapshot, DocumentData
 } from 'firebase/firestore';
 import { DailyReport, AppSettings, Wagon, Station, MapPoint, MtuRegion, AdminUser } from '../types';
 import { logger } from './logger'; // Import logger
@@ -35,14 +35,14 @@ if (!USE_LOCAL_BACKEND) {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     console.log("[Firebase] Initialized successfully. Backend is active.");
-    
+
     // Legacy persistence initialization (Compatible with gstatic imports)
     enableIndexedDbPersistence(db).catch((err) => {
-        if (err.code === 'failed-precondition') {
-            console.warn('Persistence failed: Multiple tabs open');
-        } else if (err.code === 'unimplemented') {
-            console.warn('Persistence failed: Browser not supported');
-        }
+      if (err.code === 'failed-precondition') {
+        console.warn('Persistence failed: Multiple tabs open');
+      } else if (err.code === 'unimplemented') {
+        console.warn('Persistence failed: Browser not supported');
+      }
     });
   } catch (e) {
     // Only log the message string to avoid circular error in logger
@@ -62,15 +62,15 @@ const deepClean = (obj: any, visited = new WeakSet()): any => {
     if (isNaN(obj.getTime())) return null;
     return obj.toISOString();
   }
-  
+
   // Handle Firestore Timestamps if they somehow leak in
   if (obj && typeof obj === 'object' && typeof obj.toDate === 'function') {
-      return obj.toDate().toISOString();
+    return obj.toDate().toISOString();
   }
 
   // 3. Circular Reference Check
   if (visited.has(obj)) {
-    return null; 
+    return null;
   }
   visited.add(obj);
 
@@ -82,12 +82,12 @@ const deepClean = (obj: any, visited = new WeakSet()): any => {
   // 5. Complex Object Filtering (Firestore internals, DOM nodes, etc.)
   // We strictly allow only plain Objects (constructor.name === 'Object' or null prototype).
   if (obj.constructor && obj.constructor.name !== 'Object') {
-      return undefined;
+    return undefined;
   }
-  
+
   // Specific checks for DOM or Leaflet just in case constructor check was bypassed
   if (obj._leaflet_id !== undefined || (obj.nodeType && typeof obj.cloneNode === 'function')) {
-      return undefined;
+    return undefined;
   }
 
   // 6. Plain Object Copy
@@ -138,11 +138,11 @@ const subscribeToLocalChanges = (type: EventType, callback: () => void) => {
 const LS = {
   SETTINGS: 'uty_map_config',
   ADMINS: 'uty_admins_list',
-  
+
   saveSettings: (data: any) => {
     try {
       localStorage.setItem(LS.SETTINGS, safeStringify(data));
-    } catch (e) {}
+    } catch (e) { }
   },
   getSettings: () => {
     try {
@@ -151,38 +151,38 @@ const LS = {
       return null;
     } catch (e) { return null; }
   },
-  
+
   getAdmins: () => {
     try {
       const d = localStorage.getItem(LS.ADMINS);
       return d ? JSON.parse(d) : [];
     } catch (e) { return []; }
   },
-  
+
   saveAdmin: (user: any) => {
     try {
       const admins = LS.getAdmins();
       const filtered = admins.filter((a: any) => a.username !== user.username);
       filtered.push(user);
       localStorage.setItem(LS.ADMINS, safeStringify(filtered));
-    } catch (e) {}
+    } catch (e) { }
   },
 
   deleteAdmin: (username: string) => {
-     try {
-       const admins = LS.getAdmins().filter((a: any) => a.username !== username);
-       localStorage.setItem(LS.ADMINS, safeStringify(admins));
-     } catch (e) {}
+    try {
+      const admins = LS.getAdmins().filter((a: any) => a.username !== username);
+      localStorage.setItem(LS.ADMINS, safeStringify(admins));
+    } catch (e) { }
   }
 };
 
 const withTimeout = <T>(promise: Promise<T>, ms: number = 3000): Promise<T> => {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error(`Firestore operation timed out after ${ms}ms`));
-        }, ms);
-        promise.then(v => { clearTimeout(timer); resolve(v); }).catch(r => { clearTimeout(timer); reject(r); });
-    });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Firestore operation timed out after ${ms}ms`));
+    }, ms);
+    promise.then(v => { clearTimeout(timer); resolve(v); }).catch(r => { clearTimeout(timer); reject(r); });
+  });
 };
 
 // --- API FUNCTIONS (HYBRID STRATEGY WITH TRANSACTION) ---
@@ -196,11 +196,11 @@ export const getReportByDate = async (date: string): Promise<DailyReport | undef
   // 1. Try Fetching from Backend
   try {
     if (USE_LOCAL_BACKEND) {
-        const res = await fetch(`${API_URL}/reports/${cleanDate}`);
-        if (res.ok) finalData = await res.json();
+      const res = await fetch(`${API_URL}/reports/${cleanDate}`);
+      if (res.ok) finalData = await res.json();
     } else if (db) {
-        const docSnap = await withTimeout(getDoc(doc(db, "reports", cleanDate))) as DocumentSnapshot<DocumentData>;
-        if (docSnap.exists()) finalData = docSnap.data();
+      const docSnap = await withTimeout(getDoc(doc(db, "reports", cleanDate))) as DocumentSnapshot<DocumentData>;
+      if (docSnap.exists()) finalData = docSnap.data();
     }
   } catch (error) {
     console.warn(`[Load Info] Backend load failed.`);
@@ -208,7 +208,7 @@ export const getReportByDate = async (date: string): Promise<DailyReport | undef
 
   if (finalData) {
     const sections = finalData.sections || [];
-    
+
     // Robust Un-Minification
     const unMinifiedWagons = (finalData.wagons || []).map((w: any) => ({
       sequence: w.s ?? w.sequence ?? 0,
@@ -226,7 +226,7 @@ export const getReportByDate = async (date: string): Promise<DailyReport | undef
     return {
       date: finalData.date,
       rawData: finalData.rawData || "",
-      wagons: unMinifiedWagons, 
+      wagons: unMinifiedWagons,
       sections: sections,
       stations: [],
       timestamp: finalData.timestamp || Date.now()
@@ -239,38 +239,38 @@ export const getReportsInRange = async (startDate: string, endDate: string): Pro
   const reports: DailyReport[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
-  
+
   const datesToFetch: string[] = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      datesToFetch.push(d.toISOString().split('T')[0]);
+    datesToFetch.push(d.toISOString().split('T')[0]);
   }
 
   for (const date of datesToFetch) {
-      const report = await getReportByDate(date);
-      if (report) reports.push(report);
+    const report = await getReportByDate(date);
+    if (report) reports.push(report);
   }
   return reports;
 };
 
 export const getReportDates = async (): Promise<string[]> => {
   const dates = new Set<string>();
-  
+
   // Get Backend Dates
   try {
     if (USE_LOCAL_BACKEND) {
-        const res = await fetch(`${API_URL}/reports`);
-        if (res.ok) {
-            const list = await res.json();
-            list.forEach((item: any) => dates.add(item.date));
-        }
+      const res = await fetch(`${API_URL}/reports`);
+      if (res.ok) {
+        const list = await res.json();
+        list.forEach((item: any) => dates.add(item.date));
+      }
     } else if (db) {
-        const snapshot = await withTimeout(getDocs(collection(db, "reports"))) as QuerySnapshot<DocumentData>;
-        snapshot.docs.forEach(doc => dates.add(doc.id));
+      const snapshot = await withTimeout(getDocs(collection(db, "reports"))) as QuerySnapshot<DocumentData>;
+      snapshot.docs.forEach(doc => dates.add(doc.id));
     }
   } catch (error) {
-      console.warn("Backend date fetch failed.");
+    console.warn("Backend date fetch failed.");
   }
-  
+
   return Array.from(dates).sort().reverse();
 };
 
@@ -280,36 +280,36 @@ export const getAllReports = async (): Promise<DailyReport[]> => {
   // Load Backend Reports
   try {
     if (USE_LOCAL_BACKEND) {
-        const res = await fetch(`${API_URL}/reports`);
-        if (res.ok) {
-            const list = await res.json();
-            list.forEach((l: any) => {
-                reportsMap.set(l.date, {
-                    date: l.date,
-                    timestamp: l.timestamp || Date.now(),
-                    wagons: [],
-                    rawData: "",
-                    stations: [],
-                    wagonCount: l.wagonCount || 0,
-                    totalWeight: 0
-                });
-            });
-        }
-    } else if (db) {
-        const q = query(collection(db, "reports"), orderBy("date", "desc"));
-        const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
-        snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            reportsMap.set(doc.id, {
-                date: doc.id, 
-                timestamp: data.timestamp || Date.now(),
-                wagons: [],
-                rawData: "",
-                stations: [],
-                wagonCount: data.wagons?.length || 0,
-                totalWeight: 0
-            });
+      const res = await fetch(`${API_URL}/reports`);
+      if (res.ok) {
+        const list = await res.json();
+        list.forEach((l: any) => {
+          reportsMap.set(l.date, {
+            date: l.date,
+            timestamp: l.timestamp || Date.now(),
+            wagons: [],
+            rawData: "",
+            stations: [],
+            wagonCount: l.wagonCount || 0,
+            totalWeight: 0
+          });
         });
+      }
+    } else if (db) {
+      const q = query(collection(db, "reports"), orderBy("date", "desc"));
+      const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        reportsMap.set(doc.id, {
+          date: doc.id,
+          timestamp: data.timestamp || Date.now(),
+          wagons: [],
+          rawData: "",
+          stations: [],
+          wagonCount: data.wagons?.length || 0,
+          totalWeight: 0
+        });
+      });
     }
   } catch (error) {
     // Silent fail
@@ -321,41 +321,41 @@ export const getAllReports = async (): Promise<DailyReport[]> => {
 export const subscribeToReports = (onUpdate: (reports: DailyReport[]) => void): () => void => {
   const refresh = () => getAllReports().then(onUpdate);
   const unsubscribeLocal = subscribeToLocalChanges('reports', refresh);
-  
-  refresh(); 
-  const interval = setInterval(refresh, 5000); 
+
+  refresh();
+  const interval = setInterval(refresh, 5000);
   const unsubscribeRemote = () => clearInterval(interval);
-  
+
   return () => { unsubscribeLocal(); unsubscribeRemote(); };
 };
 
 export const deleteTrainFromReport = async (date: string, trainIndex: string): Promise<{ success: boolean, message?: string }> => {
   const cleanDate = date.trim();
-  const normalize = (s: string) => (s || "").replace(/\[.*?_MARKER\]/g, '').trim();
+  const normalize = (s: string) => (s || "").trim();
   const targetIndex = normalize(trainIndex);
 
   try {
     if (USE_LOCAL_BACKEND) {
-        const res = await fetch(`${API_URL}/reports/${cleanDate}`);
-        if (res.ok) {
-            const data = await res.json();
-            const updatedWagons = (data.wagons || []).filter((w: any) => normalize(w.ti || w.trainIndex) !== targetIndex);
-            await fetch(`${API_URL}/reports/${cleanDate}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: safeStringify({ ...data, wagons: updatedWagons })
-            });
-        }
+      const res = await fetch(`${API_URL}/reports/${cleanDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        const updatedWagons = (data.wagons || []).filter((w: any) => normalize(w.ti || w.trainIndex) !== targetIndex);
+        await fetch(`${API_URL}/reports/${cleanDate}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: safeStringify({ ...data, wagons: updatedWagons })
+        });
+      }
     } else if (db) {
-        const docRef = doc(db, "reports", cleanDate);
-        await withTimeout(runTransaction(db, async (transaction) => {
-            const sfDoc = await transaction.get(docRef);
-            if (sfDoc.exists()) {
-                const data = sfDoc.data();
-                const updatedWagons = (data.wagons || []).filter((w: any) => normalize(w.ti || w.trainIndex) !== targetIndex);
-                transaction.update(docRef, { wagons: updatedWagons });
-            }
-        }), 10000);
+      const docRef = doc(db, "reports", cleanDate);
+      await withTimeout(runTransaction(db, async (transaction) => {
+        const sfDoc = await transaction.get(docRef);
+        if (sfDoc.exists()) {
+          const data = sfDoc.data();
+          const updatedWagons = (data.wagons || []).filter((w: any) => normalize(w.ti || w.trainIndex) !== targetIndex);
+          transaction.update(docRef, { wagons: updatedWagons });
+        }
+      }), 10000);
     }
     notifyChange('reports');
     return { success: true };
@@ -369,10 +369,10 @@ export const deleteReport = async (date: string): Promise<{ success: boolean, me
 
   try {
     if (USE_LOCAL_BACKEND) {
-        const res = await fetch(`${API_URL}/reports/${cleanDate}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error("Backend delete failed");
+      const res = await fetch(`${API_URL}/reports/${cleanDate}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error("Backend delete failed");
     } else if (db) {
-        await withTimeout(deleteDoc(doc(db, "reports", cleanDate)));
+      await withTimeout(deleteDoc(doc(db, "reports", cleanDate)));
     }
     notifyChange('reports');
     return { success: true };
@@ -395,25 +395,25 @@ export const saveMapSettings = async (mapPoints: MapPoint[], mtuRegions: MtuRegi
     name: String(r.name),
     color: String(r.color),
     points: (r.points || []).map((pt: any) => {
-        let lat, lng;
-        if (Array.isArray(pt)) { lat = pt[0]; lng = pt[1]; } 
-        else if (typeof pt === 'object' && pt !== null) { lat = pt.lat; lng = pt.lng; }
-        return { lat: Number(lat), lng: Number(lng) };
+      let lat, lng;
+      if (Array.isArray(pt)) { lat = pt[0]; lng = pt[1]; }
+      else if (typeof pt === 'object' && pt !== null) { lat = pt.lat; lng = pt.lng; }
+      return { lat: Number(lat), lng: Number(lng) };
     }).filter(pt => !isNaN(pt.lat) && !isNaN(pt.lng))
   }));
 
   const payload = { id: 'map_config', mapPoints: cleanPoints, mtuRegions: cleanRegions };
   LS.saveSettings(payload);
   notifyChange('settings');
-  
-  try { 
-      const cleanPayload = deepClean(payload);
-      if (USE_LOCAL_BACKEND) {
-          await fetch(`${API_URL}/settings`, { method: 'POST', body: safeStringify(cleanPayload) });
-      } else if (db) {
-          setDoc(doc(db, "settings", "map_config"), cleanPayload).catch(() => {}); 
-      }
-  } catch (e: any) {}
+
+  try {
+    const cleanPayload = deepClean(payload);
+    if (USE_LOCAL_BACKEND) {
+      await fetch(`${API_URL}/settings`, { method: 'POST', body: safeStringify(cleanPayload) });
+    } else if (db) {
+      setDoc(doc(db, "settings", "map_config"), cleanPayload).catch(() => { });
+    }
+  } catch (e: any) { }
   return true;
 };
 
@@ -421,20 +421,20 @@ export const loadMapSettings = async (): Promise<AppSettings | undefined> => {
   let data: AppSettings | undefined = undefined;
   try {
     if (USE_LOCAL_BACKEND) {
-        const res = await fetch(`${API_URL}/settings`);
-        if (res.ok) data = await res.json();
+      const res = await fetch(`${API_URL}/settings`);
+      if (res.ok) data = await res.json();
     } else if (db) {
-        const docSnap = await withTimeout(getDoc(doc(db, "settings", "map_config"))) as DocumentSnapshot<DocumentData>;
-        if (docSnap.exists()) data = docSnap.data() as AppSettings;
+      const docSnap = await withTimeout(getDoc(doc(db, "settings", "map_config"))) as DocumentSnapshot<DocumentData>;
+      if (docSnap.exists()) data = docSnap.data() as AppSettings;
     }
-  } catch (e) {}
-  
+  } catch (e) { }
+
   if (!data) data = LS.getSettings();
   if (data) {
-       const sanitizePoints = (points: any[]) => (points || []).map((p: any) => [Number(p[0] || p.lat), Number(p[1] || p.lng)] as [number, number]).filter((p: number[]) => !isNaN(p[0]) && !isNaN(p[1]));
-       data.mapPoints = (data.mapPoints || []).filter((p: any) => !isNaN(Number(p.lat)) && !isNaN(Number(p.lng)));
-       data.mtuRegions = (data.mtuRegions || []).map((r: any) => ({ ...r, points: sanitizePoints(r.points) }));
-       return data;
+    const sanitizePoints = (points: any[]) => (points || []).map((p: any) => [Number(p[0] || p.lat), Number(p[1] || p.lng)] as [number, number]).filter((p: number[]) => !isNaN(p[0]) && !isNaN(p[1]));
+    data.mapPoints = (data.mapPoints || []).filter((p: any) => !isNaN(Number(p.lat)) && !isNaN(Number(p.lng)));
+    data.mtuRegions = (data.mtuRegions || []).map((r: any) => ({ ...r, points: sanitizePoints(r.points) }));
+    return data;
   }
   return undefined;
 };
@@ -442,11 +442,11 @@ export const loadMapSettings = async (): Promise<AppSettings | undefined> => {
 export const subscribeToSettings = (onUpdate: (settings: AppSettings) => void): () => void => {
   const refresh = () => loadMapSettings().then(s => s && onUpdate(s));
   const unsubscribeLocal = subscribeToLocalChanges('settings', refresh);
-  
-  refresh(); 
-  const interval = setInterval(refresh, 5000); 
+
+  refresh();
+  const interval = setInterval(refresh, 5000);
   const unsubscribeRemote = () => clearInterval(interval);
-  
+
   return () => { unsubscribeLocal(); unsubscribeRemote(); };
 };
 
@@ -454,51 +454,51 @@ const DEFAULT_ADMIN: AdminUser = { username: 'admin', role: 'superadmin', name: 
 
 export const verifyAdmin = async (username: string, pass: string, deviceInfo: string): Promise<AdminUser | null> => {
   if (USE_LOCAL_BACKEND) {
-      const localAdmins = LS.getAdmins();
-      const found = localAdmins.find((a: any) => a.username === username && a.password === pass);
-      if (found) {
-          if (username === 'admin' && found.role !== 'superadmin') {
-              found.role = 'superadmin';
-              LS.saveAdmin(found);
-          }
-          return found;
+    const localAdmins = LS.getAdmins();
+    const found = localAdmins.find((a: any) => a.username === username && a.password === pass);
+    if (found) {
+      if (username === 'admin' && found.role !== 'superadmin') {
+        found.role = 'superadmin';
+        LS.saveAdmin(found);
       }
-      if (username === 'admin' && pass === 'admin' && localAdmins.length === 0) return DEFAULT_ADMIN;
-      return null;
+      return found;
+    }
+    if (username === 'admin' && pass === 'admin' && localAdmins.length === 0) return DEFAULT_ADMIN;
+    return null;
   }
 
   try {
-     if (db) {
-         const docRef = doc(db, "admins", username);
-         const docSnap = await withTimeout(getDoc(docRef), 3000) as DocumentSnapshot<DocumentData>;
-         if (docSnap.exists() && docSnap.data()?.password === pass) {
-            const data = docSnap.data() as AdminUser;
-            if (username === 'admin' && data.role !== 'superadmin') {
-                data.role = 'superadmin';
-                await setDoc(docRef, { role: 'superadmin' }, { merge: true }).catch(() => {});
-            }
-            await setDoc(docRef, { lastLogin: Date.now(), deviceInfo }, { merge: true }).catch(() => {});
-            return data;
-         } else if (username === 'admin' && pass === 'admin') {
-             const adminsSnap = await getDocs(collection(db, "admins"));
-             if (adminsSnap.empty) {
-                 await setDoc(docRef, { ...DEFAULT_ADMIN, password: 'admin' });
-                 return DEFAULT_ADMIN;
-             }
-         }
-     } else {
-         const localAdmins = LS.getAdmins();
-         const found = localAdmins.find((a: any) => a.username === username && a.password === pass);
-         if (found) {
-             if (username === 'admin' && found.role !== 'superadmin') {
-                 found.role = 'superadmin';
-                 LS.saveAdmin(found);
-             }
-             return found;
-         }
-         if (username === 'admin' && pass === 'admin' && localAdmins.length === 0) return DEFAULT_ADMIN;
-     }
-  } catch (e) {}
+    if (db) {
+      const docRef = doc(db, "admins", username);
+      const docSnap = await withTimeout(getDoc(docRef), 3000) as DocumentSnapshot<DocumentData>;
+      if (docSnap.exists() && docSnap.data()?.password === pass) {
+        const data = docSnap.data() as AdminUser;
+        if (username === 'admin' && data.role !== 'superadmin') {
+          data.role = 'superadmin';
+          await setDoc(docRef, { role: 'superadmin' }, { merge: true }).catch(() => { });
+        }
+        await setDoc(docRef, { lastLogin: Date.now(), deviceInfo }, { merge: true }).catch(() => { });
+        return data;
+      } else if (username === 'admin' && pass === 'admin') {
+        const adminsSnap = await getDocs(collection(db, "admins"));
+        if (adminsSnap.empty) {
+          await setDoc(docRef, { ...DEFAULT_ADMIN, password: 'admin' });
+          return DEFAULT_ADMIN;
+        }
+      }
+    } else {
+      const localAdmins = LS.getAdmins();
+      const found = localAdmins.find((a: any) => a.username === username && a.password === pass);
+      if (found) {
+        if (username === 'admin' && found.role !== 'superadmin') {
+          found.role = 'superadmin';
+          LS.saveAdmin(found);
+        }
+        return found;
+      }
+      if (username === 'admin' && pass === 'admin' && localAdmins.length === 0) return DEFAULT_ADMIN;
+    }
+  } catch (e) { }
   return null;
 };
 
@@ -506,23 +506,23 @@ export const verifyAdmin = async (username: string, pass: string, deviceInfo: st
 
 export const getAdmins = async (): Promise<AdminUser[]> => {
   if (!USE_LOCAL_BACKEND && db) {
-      try {
-        const snapshot = await withTimeout(getDocs(collection(db, "admins"))) as QuerySnapshot<DocumentData>;
-        if (!snapshot.empty) {
-            return snapshot.docs.map(d => {
-                const data = d.data() as AdminUser;
-                if (data.username === 'admin') data.role = 'superadmin';
-                return data;
-            });
-        }
-      } catch (e) {}
+    try {
+      const snapshot = await withTimeout(getDocs(collection(db, "admins"))) as QuerySnapshot<DocumentData>;
+      if (!snapshot.empty) {
+        return snapshot.docs.map(d => {
+          const data = d.data() as AdminUser;
+          if (data.username === 'admin') data.role = 'superadmin';
+          return data;
+        });
+      }
+    } catch (e) { }
   }
   const local = LS.getAdmins();
   if (local.length > 0) {
-      return local.map((a: any) => {
-          if (a.username === 'admin') a.role = 'superadmin';
-          return a;
-      });
+    return local.map((a: any) => {
+      if (a.username === 'admin') a.role = 'superadmin';
+      return a;
+    });
   }
   return [DEFAULT_ADMIN];
 };
@@ -530,11 +530,11 @@ export const getAdmins = async (): Promise<AdminUser[]> => {
 export const subscribeToAdmins = (onUpdate: (admins: AdminUser[]) => void): () => void => {
   const refresh = () => getAdmins().then(onUpdate);
   const unsubscribeLocal = subscribeToLocalChanges('admins', refresh);
-  
-  refresh(); 
-  const interval = setInterval(refresh, 5000); 
+
+  refresh();
+  const interval = setInterval(refresh, 5000);
   const unsubscribeRemote = () => clearInterval(interval);
-  
+
   return () => { unsubscribeLocal(); unsubscribeRemote(); };
 };
 
@@ -542,13 +542,13 @@ export const addAdmin = async (admin: AdminUser, pass: string, creator?: string)
   const newAdmin = { ...admin, password: pass, createdBy: creator };
   LS.saveAdmin(newAdmin);
   notifyChange('admins');
-  
+
   if (creator) {
-      logSystemAction('ADMIN_ADD', creator, `Added admin: ${admin.username}`);
+    logSystemAction('ADMIN_ADD', creator, `Added admin: ${admin.username}`);
   }
-  
+
   if (!USE_LOCAL_BACKEND && db) {
-      try { await withTimeout(setDoc(doc(db, "admins", admin.username), newAdmin)); } catch (e) {}
+    try { await withTimeout(setDoc(doc(db, "admins", admin.username), newAdmin)); } catch (e) { }
   }
   return true;
 };
@@ -556,69 +556,69 @@ export const addAdmin = async (admin: AdminUser, pass: string, creator?: string)
 export const deleteAdmin = async (username: string, deleter?: string): Promise<boolean> => {
   LS.deleteAdmin(username);
   notifyChange('admins');
-  
+
   if (deleter) {
-      logSystemAction('ADMIN_DELETE', deleter, `Deleted admin: ${username}`);
+    logSystemAction('ADMIN_DELETE', deleter, `Deleted admin: ${username}`);
   }
 
   if (!USE_LOCAL_BACKEND && db) {
-      try { await withTimeout(deleteDoc(doc(db, "admins", username))); } catch (e) {}
+    try { await withTimeout(deleteDoc(doc(db, "admins", username))); } catch (e) { }
   }
   return true;
 };
 
 export const updateAdmin = async (username: string, updates: Partial<AdminUser>, updater?: string): Promise<boolean> => {
-    // Local Storage Update
-    const admins = LS.getAdmins();
-    const idx = admins.findIndex((a: any) => a.username === username);
-    if (idx >= 0) {
-        admins[idx] = { ...admins[idx], ...updates };
-        LS.saveSettings(admins); // Note: LS.saveSettings is for map config, need to fix LS helper if used for admins
-        // Actually LS.saveAdmin handles add/update if we pass full object.
-        // Let's just re-save
-        localStorage.setItem(LS.ADMINS, safeStringify(admins));
-    }
-    notifyChange('admins');
+  // Local Storage Update
+  const admins = LS.getAdmins();
+  const idx = admins.findIndex((a: any) => a.username === username);
+  if (idx >= 0) {
+    admins[idx] = { ...admins[idx], ...updates };
+    LS.saveSettings(admins); // Note: LS.saveSettings is for map config, need to fix LS helper if used for admins
+    // Actually LS.saveAdmin handles add/update if we pass full object.
+    // Let's just re-save
+    localStorage.setItem(LS.ADMINS, safeStringify(admins));
+  }
+  notifyChange('admins');
 
-    if (updater) {
-        logSystemAction('ADMIN_UPDATE', updater, `Updated admin: ${username}`);
-    }
+  if (updater) {
+    logSystemAction('ADMIN_UPDATE', updater, `Updated admin: ${username}`);
+  }
 
-    if (!USE_LOCAL_BACKEND && db) {
-        try { await withTimeout(setDoc(doc(db, "admins", username), updates, { merge: true })); } catch (e) {}
-    }
-    return true;
+  if (!USE_LOCAL_BACKEND && db) {
+    try { await withTimeout(setDoc(doc(db, "admins", username), updates, { merge: true })); } catch (e) { }
+  }
+  return true;
 };
 export const logSystemAction = async (action: 'LOGIN' | 'DATA_UPLOAD' | 'DATA_DELETE' | 'ADMIN_ADD' | 'ADMIN_DELETE' | 'ADMIN_UPDATE', username: string, details: string) => {
-    const logEntry = {
-        id: String(Date.now()) + Math.random().toString(36).substr(2, 9),
-        timestamp: Date.now(),
-        action,
-        username,
-        details
-    };
+  const logEntry = {
+    id: String(Date.now()) + Math.random().toString(36).substr(2, 9),
+    timestamp: Date.now(),
+    action,
+    username,
+    details
+  };
 
-    try {
-        if (USE_LOCAL_BACKEND) {
-            // In a real local backend, we would POST to /logs
-            // For now, we might just console log or store in LS if needed, but let's skip LS for logs to avoid quota issues
-        } else if (db) {
-            await setDoc(doc(db, "logs", logEntry.id), logEntry);
-        }
-    } catch (e) {
-        console.warn("Failed to save log", e);
+  try {
+    if (USE_LOCAL_BACKEND) {
+      // In a real local backend, we would POST to /logs
+      // For now, we might just console log or store in LS if needed, but let's skip LS for logs to avoid quota issues
+    } else if (db) {
+      await setDoc(doc(db, "logs", logEntry.id), logEntry);
     }
+  } catch (e) {
+    console.warn("Failed to save log", e);
+  }
 };
 
 export const getSystemLogs = async (): Promise<any[]> => {
-    try {
-        if (db) {
-            const q = query(collection(db, "logs"), orderBy("timestamp", "desc"));
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(d => d.data());
-        }
-    } catch (e) {}
-    return [];
+  try {
+    if (db) {
+      const q = query(collection(db, "logs"), orderBy("timestamp", "desc"));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => d.data());
+    }
+  } catch (e) { }
+  return [];
 };
 
 // Updated saveDailyReport to include user logging
@@ -628,8 +628,8 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
 
   // Log the action
   if (user) {
-      const wagonCount = newWagons.length;
-      logSystemAction('DATA_UPLOAD', user.username, `Uploaded ${wagonCount} wagons for date ${cleanDate}`);
+    const wagonCount = newWagons.length;
+    logSystemAction('DATA_UPLOAD', user.username, `Uploaded ${wagonCount} wagons for date ${cleanDate}`);
   }
 
   // Deduplicate raw blocks into a section pool to save massive space
@@ -649,7 +649,7 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
   const toMinified = (w: any) => {
     const rb = w.rb ?? w.rawBlock;
     const si = w.si ?? getSectionIndex(rb);
-    
+
     return {
       s: w.s ?? w.sequence ?? 0,
       n: w.n ?? w.number ?? "",
@@ -677,40 +677,40 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
   // Improved Merge Logic: Composite Key to preserve history/movements
   // AND enforces minification on all wagons
   const mergeWagons = (oldWagons: any[], newWagons: any[], oldSections: string[] = []) => {
-      const map = new Map<string, any>();
-      const getKey = (w: any) => w.n;
+    const map = new Map<string, any>();
+    const getKey = (w: any) => w.n;
 
-      // When merging, we need to handle section indices carefully
-      // 1. Add old wagons (they already have indices pointing to oldSections)
-      oldWagons.forEach(w => { 
-          const rb = w.rb ?? (w.si !== undefined ? oldSections[w.si] : "");
-          const si = getSectionIndex(rb);
-          const min = { ...toMinified(w), si };
-          if (min.n) map.set(getKey(min), min); 
-      });
+    // When merging, we need to handle section indices carefully
+    // 1. Add old wagons (they already have indices pointing to oldSections)
+    oldWagons.forEach(w => {
+      const rb = w.rb ?? (w.si !== undefined ? oldSections[w.si] : "");
+      const si = getSectionIndex(rb);
+      const min = { ...toMinified(w), si };
+      if (min.n) map.set(getKey(min), min);
+    });
 
-      // 2. Add new wagons
-      newWagons.forEach(w => { 
-          const rb = w.rb ?? w.rawBlock;
-          const si = getSectionIndex(rb);
-          const min = { ...toMinified(w), si };
-          if (min.n) map.set(getKey(min), min); 
-      });
-      
-      return Array.from(map.values());
+    // 2. Add new wagons
+    newWagons.forEach(w => {
+      const rb = w.rb ?? w.rawBlock;
+      const si = getSectionIndex(rb);
+      const min = { ...toMinified(w), si };
+      if (min.n) map.set(getKey(min), min);
+    });
+
+    return Array.from(map.values());
   };
 
   const mergeRawData = (oldRaw: string, newRaw: string) => {
-      if (!oldRaw) return newRaw;
-      if (!newRaw) return oldRaw;
-      
-      // Normalize to check for duplicates
-      const normalizedNew = newRaw.trim();
-      if (oldRaw.includes(normalizedNew)) {
-          return oldRaw;
-      }
-      
-      return oldRaw + "\n\n--- MERGED [" + new Date().toLocaleTimeString() + "] ---\n" + newRaw;
+    if (!oldRaw) return newRaw;
+    if (!newRaw) return oldRaw;
+
+    // Normalize to check for duplicates
+    const normalizedNew = newRaw.trim();
+    if (oldRaw.includes(normalizedNew)) {
+      return oldRaw;
+    }
+
+    return oldRaw + "\n\n--- MERGED [" + new Date().toLocaleTimeString() + "] ---\n" + newRaw;
   };
 
   // --- PRIMARY SAVE STRATEGY: BACKEND ---
@@ -720,98 +720,98 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
 
   try {
     if (USE_LOCAL_BACKEND) {
-        let existingData: any = {};
-        try {
-            const res = await fetch(`${API_URL}/reports/${cleanDate}`);
-            if (res.ok) existingData = await res.json();
-        } catch (e) {}
+      let existingData: any = {};
+      try {
+        const res = await fetch(`${API_URL}/reports/${cleanDate}`);
+        if (res.ok) existingData = await res.json();
+      } catch (e) { }
 
-        const mergedWagons = mergeWagons(existingData.wagons || [], minifiedNewWagons, existingData.sections || []);
+      const mergedWagons = mergeWagons(existingData.wagons || [], minifiedNewWagons, existingData.sections || []);
 
-        const mergedPayload = {
-            date: cleanDate,
-            rawData: mergeRawData(existingData.rawData || "", newRawData),
-            wagons: mergedWagons,
-            sections: sectionPool,
-            timestamp
-        };
+      const mergedPayload = {
+        date: cleanDate,
+        rawData: mergeRawData(existingData.rawData || "", newRawData),
+        wagons: mergedWagons,
+        sections: sectionPool,
+        timestamp
+      };
 
-        const res = await fetch(`${API_URL}/reports`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: safeStringify(mergedPayload)
-        });
-        
-        if (!res.ok) throw new Error("Local Server Error");
-        
-        backendSaved = true;
-        finalReport = mergedPayload;
-        
+      const res = await fetch(`${API_URL}/reports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: safeStringify(mergedPayload)
+      });
+
+      if (!res.ok) throw new Error("Local Server Error");
+
+      backendSaved = true;
+      finalReport = mergedPayload;
+
     } else if (db) {
-        const docRef = doc(db, "reports", cleanDate);
-        
+      const docRef = doc(db, "reports", cleanDate);
+
+      try {
+        await withTimeout(runTransaction(db, async (transaction) => {
+          const sfDoc = await transaction.get(docRef);
+
+          let finalWagons = minifiedNewWagons;
+          let finalRawData = newRawData;
+          let finalSections = sectionPool;
+
+          if (sfDoc.exists()) {
+            const data = sfDoc.data();
+            finalWagons = mergeWagons(data.wagons || [], minifiedNewWagons, data.sections || []);
+            finalRawData = mergeRawData(data.rawData || "", newRawData);
+            finalSections = sectionPool;
+          }
+
+          const cleanPayload = deepClean({
+            date: cleanDate,
+            rawData: finalRawData,
+            wagons: finalWagons,
+            sections: finalSections,
+            timestamp
+          });
+
+          transaction.set(docRef, cleanPayload);
+          finalReport = cleanPayload;
+        }), 10000);
+
+        backendSaved = true;
+      } catch (txError) {
+        errorMessage = String(txError);
+
         try {
-            await withTimeout(runTransaction(db, async (transaction) => {
-                const sfDoc = await transaction.get(docRef);
-                
-                let finalWagons = minifiedNewWagons;
-                let finalRawData = newRawData;
-                let finalSections = sectionPool;
+          const docSnap = await getDoc(docRef);
 
-                if (sfDoc.exists()) {
-                    const data = sfDoc.data();
-                    finalWagons = mergeWagons(data.wagons || [], minifiedNewWagons, data.sections || []);
-                    finalRawData = mergeRawData(data.rawData || "", newRawData);
-                    finalSections = sectionPool;
-                }
+          let finalWagons = minifiedNewWagons;
+          let finalRawData = newRawData;
+          let finalSections = sectionPool;
 
-                const cleanPayload = deepClean({
-                    date: cleanDate,
-                    rawData: finalRawData,
-                    wagons: finalWagons,
-                    sections: finalSections,
-                    timestamp
-                });
+          if (docSnap.exists()) {
+            const serverData = docSnap.data();
+            finalWagons = mergeWagons(serverData.wagons || [], minifiedNewWagons, serverData.sections || []);
+            finalRawData = mergeRawData(serverData.rawData || "", newRawData);
+            finalSections = sectionPool;
+          }
 
-                transaction.set(docRef, cleanPayload);
-                finalReport = cleanPayload;
-            }), 10000); 
-            
-            backendSaved = true;
-        } catch (txError) {
-            errorMessage = String(txError);
-            
-            try {
-                const docSnap = await getDoc(docRef);
-                
-                let finalWagons = minifiedNewWagons; 
-                let finalRawData = newRawData;
-                let finalSections = sectionPool;
+          const mergedPayload = deepClean({
+            ...fullPayload,
+            wagons: finalWagons,
+            rawData: finalRawData,
+            sections: finalSections,
+            timestamp: Date.now()
+          });
 
-                if (docSnap.exists()) {
-                    const serverData = docSnap.data();
-                    finalWagons = mergeWagons(serverData.wagons || [], minifiedNewWagons, serverData.sections || []);
-                    finalRawData = mergeRawData(serverData.rawData || "", newRawData);
-                    finalSections = sectionPool;
-                }
+          await setDoc(docRef, mergedPayload);
+          finalReport = mergedPayload;
+          backendSaved = true;
 
-                const mergedPayload = deepClean({
-                    ...fullPayload,
-                    wagons: finalWagons,
-                    rawData: finalRawData,
-                    sections: finalSections,
-                    timestamp: Date.now()
-                });
-
-                await setDoc(docRef, mergedPayload);
-                finalReport = mergedPayload; 
-                backendSaved = true;
-
-            } catch (fallbackError) {
-                await setDoc(docRef, deepClean(fullPayload));
-                backendSaved = true;
-            }
+        } catch (fallbackError) {
+          await setDoc(docRef, deepClean(fullPayload));
+          backendSaved = true;
         }
+      }
     }
   } catch (error) {
     const safeErrorMsg = error instanceof Error ? error.message : String(error);
@@ -822,14 +822,14 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
 
   // Notify listeners of the change
   if (backendSaved) {
-      notifyChange('reports');
+    notifyChange('reports');
   }
 
-  return { 
-      success: backendSaved, 
-      backendSaved, 
-      report: finalReport,
-      message: errorMessage
+  return {
+    success: backendSaved,
+    backendSaved,
+    report: finalReport,
+    message: errorMessage
   };
 };
 

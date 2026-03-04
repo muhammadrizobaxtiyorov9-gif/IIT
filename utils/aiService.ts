@@ -1,5 +1,12 @@
 export const cleanDataWithAI = async (rawText: string): Promise<string> => {
   try {
+    // PROTECT VALID CYRILLIC
+    // If the string already contains valid Cyrillic characters, it is NOT mojibake.
+    // Converting it would destroy the UTF-8 bytes.
+    if (/[а-яА-ЯёЁ]/.test(rawText)) {
+      return rawText;
+    }
+
     // "ÏPMÄ" and other garbled texts happen when bytes are read as Latin-1/ISO-8859-1 (or Windows-1252)
     // instead of the original CP866 (or CP1251). We first restore the bytes:
     const bytes = new Uint8Array(rawText.length);

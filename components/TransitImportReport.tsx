@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Wagon, Station, ReportCell, Language } from '../types';
-import { FileText, X, Printer, LayoutGrid, Table, ArrowDownRight, ArrowUpRight, ShieldCheck, Info, Download } from 'lucide-react';
+import { FileText, X, Printer, LayoutGrid, Table, ArrowDownRight, ArrowUpRight, ShieldCheck, Info, Download, AlertTriangle } from 'lucide-react';
 import { PieChart, Pie, Cell as RechartsCell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { identifyTrainProtocol } from '../utils/trainProtocols';
 import { MGSP_DEFINITIONS, normalizeMgspName } from '../utils/stationUtils';
@@ -145,6 +145,14 @@ const FlowCard: React.FC<{ title: string; transitData: TransitRow; importData: I
 const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate }) => {
   const [modalData, setModalData] = useState<{ title: string, subtitle: string, items: Wagon[] } | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'visual'>('table');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  React.useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
 
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
@@ -284,7 +292,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
             window.parent.print();
           } catch (pe) {
             console.error("Parent print failed", pe);
-            alert("Print failed. Please try using your browser's print shortcut (Ctrl+P or Cmd+P).");
+            setToast({ message: "Print failed. Please try using your browser's print shortcut (Ctrl+P or Cmd+P).", type: 'error' });
           }
         }
       }
@@ -332,8 +340,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
 
       // Special check: Galaba (73640) is in Uzbekistan (Dor 73) but treated as Transit to Afghanistan
       const isGalaba = w.stationCode.startsWith('7364') ||
-        (w.destinationStation || '').toLowerCase().includes('галаба') ||
-        (w.trainIndex || "").includes("GALABA_MARKER");
+        (w.destinationStation || '').toLowerCase().includes('галаба');
 
       // Import Rule: Must be Dor 73 or 72, AND NOT Galaba
       let isImport = (destDor === 73 || destDor === 72) && !isGalaba;
@@ -366,9 +373,9 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           (w.entryPoint?.name || "");
         // Robust regex for Bekabad and Kudukli (Handles Cyrillic/Latin lookalikes)
         // Bekabad: Б [ЕE] [КK] [АA] Б
-        const isBek = /[БB][ЕE][КK][АA][БB]/i.test(textMarkers) || (w.trainIndex || "").includes("BEKAB_MARKER");
+        const isBek = /[БB][ЕE][КK][АA][БB]/i.test(textMarkers);
         // Kudukli: [КK] [УY] [ДD] [УY] [КK]
-        const isKud = /[КK][УY][ДD][УY][КK]/i.test(textMarkers) || (w.trainIndex || "").includes("KUDUK_MARKER");
+        const isKud = /[КK][УY][ДD][УY][КK]/i.test(textMarkers);
 
         const code4 = w.stationCode.substring(0, 4);
         const bekPrefixes = new Set(["7473", "7474", "7475", "7476", "7477", "7478", "7479", "7480", "7481", "7483", "7484", "7485", "7486"]);

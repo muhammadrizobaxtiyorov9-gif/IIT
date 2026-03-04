@@ -1028,14 +1028,6 @@ export function* parseOperationalDataGenerator(rawData: string, stations: Statio
           routeVerification
         };
 
-        if (currentTrainDirection === 'BEKABAD') {
-          wagon.trainIndex += " [BEKAB_MARKER]";
-        } else if (currentTrainDirection === 'KUDUKLI') {
-          wagon.trainIndex += " [KUDUK_MARKER]";
-        } else if (currentTrainDirection === 'GALABA') {
-          wagon.trainIndex += " [GALABA_MARKER]";
-        }
-
         wagonsProcessed = true;
         batch.push(wagon);
 
