@@ -459,7 +459,7 @@ const App: React.FC = () => {
   };
 
   const refreshAvailableDates = async () => {
-    const dates = await getReportDates();
+    const dates = await getReportDates(currentUser || undefined);
     setAvailableDates(new Set(dates));
   };
 
@@ -471,7 +471,7 @@ const App: React.FC = () => {
       let combinedRawData = "";
 
       // Fetch reports for range
-      const reports = await getReportsInRange(range.startDate, range.endDate);
+      const reports = await getReportsInRange(range.startDate, range.endDate, currentUser || undefined);
 
       if (reports.length > 0) {
         // Sort reports by date ascending to ensure latest status overrides previous

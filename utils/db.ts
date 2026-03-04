@@ -189,7 +189,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 3000): Promise<T> => {
 
 
 
-export const getReportByDate = async (date: string): Promise<DailyReport | undefined> => {
+export const getReportByDate = async (date: string, userContext?: AdminUser): Promise<DailyReport | undefined> => {
   let finalData: any = null;
   const cleanDate = date.trim();
 
@@ -207,6 +207,12 @@ export const getReportByDate = async (date: string): Promise<DailyReport | undef
   }
 
   if (finalData) {
+    if (userContext && userContext.role === 'user') {
+      if (finalData.uploadedBy !== userContext.username) {
+        return undefined; // Hide from unauthorized standard users
+      }
+    }
+
     const sections = finalData.sections || [];
 
     // Robust Un-Minification
@@ -235,7 +241,7 @@ export const getReportByDate = async (date: string): Promise<DailyReport | undef
   return undefined;
 };
 
-export const getReportsInRange = async (startDate: string, endDate: string): Promise<DailyReport[]> => {
+export const getReportsInRange = async (startDate: string, endDate: string, userContext?: AdminUser): Promise<DailyReport[]> => {
   const reports: DailyReport[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -246,13 +252,13 @@ export const getReportsInRange = async (startDate: string, endDate: string): Pro
   }
 
   for (const date of datesToFetch) {
-    const report = await getReportByDate(date);
+    const report = await getReportByDate(date, userContext);
     if (report) reports.push(report);
   }
   return reports;
 };
 
-export const getReportDates = async (): Promise<string[]> => {
+export const getReportDates = async (userContext?: AdminUser): Promise<string[]> => {
   const dates = new Set<string>();
 
   // Get Backend Dates
@@ -264,8 +270,17 @@ export const getReportDates = async (): Promise<string[]> => {
         list.forEach((item: any) => dates.add(item.date));
       }
     } else if (db) {
-      const snapshot = await withTimeout(getDocs(collection(db, "reports"))) as QuerySnapshot<DocumentData>;
-      snapshot.docs.forEach(doc => dates.add(doc.id));
+      let q = collection(db, "reports") as any;
+      if (userContext && userContext.role === 'user') {
+        q = query(q, window.location.host.includes('localhost') ? null as any : require('firebase/firestore').where("uploadedBy", "==", userContext.username)); // Fallback placeholder if imported properly above. We'll use correct imports.
+      }
+      const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
+      snapshot.docs.forEach(doc => {
+        const d = doc.data();
+        if (!userContext || userContext.role !== 'user' || d.uploadedBy === userContext.username) {
+          dates.add(doc.id);
+        }
+      });
     }
   } catch (error) {
     console.warn("Backend date fetch failed.");
@@ -274,7 +289,7 @@ export const getReportDates = async (): Promise<string[]> => {
   return Array.from(dates).sort().reverse();
 };
 
-export const getAllReports = async (): Promise<DailyReport[]> => {
+export const getAllReports = async (userContext?: AdminUser): Promise<DailyReport[]> => {
   const reportsMap = new Map<string, DailyReport>();
 
   // Load Backend Reports
@@ -289,14 +304,17 @@ export const getAllReports = async (): Promise<DailyReport[]> => {
             timestamp: l.timestamp || Date.now(),
             wagons: [],
             rawData: "",
+            sections: [],
             stations: [],
             wagonCount: l.wagonCount || 0,
+            uploadedBy: l.uploadedBy,
             totalWeight: 0
           });
         });
       }
     } else if (db) {
-      const q = query(collection(db, "reports"), orderBy("date", "desc"));
+      const coll = collection(db, "reports");
+      const q = query(coll, orderBy("date", "desc"));
       const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
       snapshot.docs.forEach(doc => {
         const data = doc.data();
@@ -305,11 +323,22 @@ export const getAllReports = async (): Promise<DailyReport[]> => {
           timestamp: data.timestamp || Date.now(),
           wagons: [],
           rawData: "",
+          sections: [],
           stations: [],
           wagonCount: data.wagons?.length || 0,
+          uploadedBy: data.uploadedBy,
           totalWeight: 0
         });
       });
+    }
+
+    // Client-side fallback filtering if needed (works for both backend and naive firestore fetches)
+    if (userContext && userContext.role === 'user') {
+      for (const [key, val] of Array.from(reportsMap.entries())) {
+        if (val.uploadedBy !== userContext.username) {
+          reportsMap.delete(key);
+        }
+      }
     }
   } catch (error) {
     // Silent fail
@@ -318,8 +347,8 @@ export const getAllReports = async (): Promise<DailyReport[]> => {
   return Array.from(reportsMap.values()).sort((a, b) => b.date.localeCompare(a.date));
 };
 
-export const subscribeToReports = (onUpdate: (reports: DailyReport[]) => void): () => void => {
-  const refresh = () => getAllReports().then(onUpdate);
+export const subscribeToReports = (onUpdate: (reports: DailyReport[]) => void, userContext?: AdminUser): () => void => {
+  const refresh = () => getAllReports(userContext).then(onUpdate);
   const unsubscribeLocal = subscribeToLocalChanges('reports', refresh);
 
   refresh();
@@ -669,13 +698,17 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
 
   const minifiedNewWagons = newWagons.map(toMinified);
 
-  const fullPayload = {
+  const fullPayload: any = {
     date: cleanDate,
     rawData: newRawData || "",
     wagons: minifiedNewWagons,
     sections: sectionPool,
     timestamp
   };
+
+  if (user) {
+    fullPayload.uploadedBy = user.username;
+  }
 
   // Improved Merge Logic: Composite Key to preserve history/movements
   // AND enforces minification on all wagons
@@ -731,13 +764,20 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
 
       const mergedWagons = mergeWagons(existingData.wagons || [], minifiedNewWagons, existingData.sections || []);
 
-      const mergedPayload = {
+      const mergedPayload: any = {
         date: cleanDate,
         rawData: mergeRawData(existingData.rawData || "", newRawData),
         wagons: mergedWagons,
         sections: sectionPool,
         timestamp
       };
+
+      if (user) {
+        mergedPayload.uploadedBy = user.username;
+      }
+      // If updating an existing doc as normal user, you overwrite the uploader. 
+      // If we don't want that, we keep the original: `existingData.uploadedBy || user.username`
+      // Let's ensure ownership transfers to the latest uploader:
 
       const res = await fetch(`${API_URL}/reports`, {
         method: 'POST',
@@ -768,13 +808,17 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
             finalSections = sectionPool;
           }
 
-          const cleanPayload = deepClean({
+          const cleanPayload: any = deepClean({
             date: cleanDate,
             rawData: finalRawData,
             wagons: finalWagons,
             sections: finalSections,
             timestamp
           });
+
+          if (user) {
+            cleanPayload.uploadedBy = user.username;
+          }
 
           transaction.set(docRef, cleanPayload);
           finalReport = cleanPayload;

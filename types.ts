@@ -79,6 +79,7 @@ export interface DailyReport {
   timestamp: number; // When it was saved
   wagonCount?: number;
   totalWeight?: number;
+  uploadedBy?: string; // Username of the uploader, used for data visibility checking
 }
 
 export interface AppSettings {
