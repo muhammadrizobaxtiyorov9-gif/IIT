@@ -10,6 +10,7 @@ import {
     Activity, ArrowRight, Package, TrendingUp, Info, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { normalizeMgspName } from '../utils/stationUtils';
 
 interface TrainInfographicsProps {
     wagons: Wagon[];
@@ -23,64 +24,8 @@ const PALETTE = [
     '#06b6d4', '#0ea5e9', '#84cc16', '#ef4444', '#64748b',
 ];
 
-// Exact entry keys we should look for anywhere in the string
-const KNOWN_CODES = [
-    '6980', '6900', '6600', '7076', '9800', '9859', // САРЫАГАЧ
-    '7247', // СЫРДАРЬЯ
-    '6628', '6611', // КАРАКАЛПАКСТАН
-    '7478', '7476', '74-76', // БЕКАБАД / ИСТИКЛОЛ
-    '7458', // КУДУКЛИ
-    '7464', // АМУЗАНГ
-    '7585', // ТАХИАТАШ
-    '7571', '7502', '7504', // ХОДЖИДАВЛЕТ / 161
-    '7568', '7498', // РАЗЪЕЗД 161
-    '7180', '7192', '7191', // КИРГИЗИЯ
-    '7364' // ГАЛАБА
-];
-
-const matchMgspRobust = (indexStr: string): { from: string, to: string, mgsp: string } => {
-    let searchArea = indexStr;
-    const parenMatch = indexStr.match(/\((.*?)\)/);
-    if (parenMatch) searchArea = parenMatch[1]; // Look inside parens strongly if they exist
-
-    let fromCode = '';
-    for (const code of KNOWN_CODES) {
-        if (searchArea.includes(code)) {
-            fromCode = code.replace('-', ''); // normalize 74-76 -> 7476
-            break;
-        }
-    }
-
-    // Try finding destination code (last 4 digits in searchArea)
-    let toCode = '';
-    const parts = searchArea.match(/\d{4}/g);
-    if (parts && parts.length > 1) {
-        toCode = parts[parts.length - 1]; // usually the last part
-    } else if (!fromCode && parts && parts.length === 1) {
-        // Only one code? Let's assume it's the From code if fromCode is empty
-        fromCode = parts[0];
-    }
-
-    let mgsp = 'Неизвестно';
-    if (['6980', '6900', '6600', '7076', '9800', '9859'].includes(fromCode)) mgsp = 'САРЫАГАЧ';
-    else if (fromCode === '7247') mgsp = 'СЫРДАРЬЯ';
-    else if (['6628', '6611'].includes(fromCode)) mgsp = 'КАРАКАЛПАКСТАН';
-    else if (fromCode === '7458') mgsp = 'КУДУКЛИ';
-    else if (fromCode === '7464') mgsp = 'АМУЗАНГ';
-    else if (fromCode === '7585') mgsp = 'ТАХИАТАШ';
-    else if (['7180', '7192', '7191'].includes(fromCode)) mgsp = 'КИРГИЗИЯ';
-    else if (fromCode === '7364') mgsp = 'ГАЛАБА';
-    // Ambiguous cases -> Use toCode to guess
-    else if (['7478', '7476'].includes(fromCode)) {
-        mgsp = toCode === '7400' ? 'ИСТИКЛОЛ' : 'БЕКАБАД';
-    } else if (['7571', '7502', '7504', '7568', '7498'].includes(fromCode)) {
-        if (fromCode === '7504') mgsp = toCode === '7300' ? 'ХОДЖИДАВЛЕТ' : 'РАЗЪЕЗД 161';
-        else if (['7571', '7502'].includes(fromCode)) mgsp = 'ХОДЖИДАВЛЕТ';
-        else mgsp = 'РАЗЪЕЗД 161';
-    }
-
-    return { from: fromCode, to: toCode, mgsp };
-};
+// Removed redundant KNOWN_CODES and matchMgspRobust because 
+// we now use the single source of truth: normalizeMgspName
 
 const resolveStation = (code: string, stations: Station[]): string => {
     if (!code) return code;
@@ -156,14 +101,28 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
                 return;
             }
 
-            const { from, to, mgsp } = matchMgspRobust(key);
-            let destName = to ? resolveStation(to, stations) : (lang === 'uz' ? 'Nomaʼlum st.' : 'Неизвестная ст.');
-            // Fallback if resolve fails
-            if (destName === to) destName = lang === 'uz' ? `Stansiya ${to}` : `Станция ${to}`;
+            // Safe destination extraction
+            let searchArea = key;
+            const parenMatch = key.match(/\((.*?)\)/);
+            if (parenMatch) searchArea = parenMatch[1];
+
+            let toCode = '';
+            const parts = searchArea.match(/\d{4,5}/g);
+            if (parts && parts.length > 1) {
+                toCode = parts[parts.length - 1];
+            }
+
+            // Sync MGSP Identification strictly with Report Component (stationUtils.ts)
+            let rawMgsp = normalizeMgspName(w.entryPoint, key);
+            let mgsp = rawMgsp === 'ПРОЧИЕ' ? 'Неизвестно' : rawMgsp;
+
+            let destName = toCode ? resolveStation(toCode, stations) : '';
+            if (!destName || destName === toCode) destName = w.matchedStation?.name || w.destinationStation || '';
+            if (!destName) destName = (lang === 'uz' ? 'Nomaʼlum st.' : 'Неизвестная ст.');
 
             const date = toDate(w.arrivalDate || (w as any).ad);
 
-            map.set(key, { idx: key, fromCode: from, toCode: to, mgsp, destName, date, wagons: 1 });
+            map.set(key, { idx: key, fromCode: '', toCode: toCode, mgsp, destName, date, wagons: 1 });
         });
         return Array.from(map.values());
     }, [wagons, stations, lang]);
@@ -197,7 +156,48 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
     }, [finalStiks]);
 
     const chartData = useMemo(() => {
+        let start = rStart;
+        let end = rEnd;
+
+        if (!useRange && mgspStiks.length > 0) {
+            const times = mgspStiks.map(s => s.date?.getTime()).filter(Boolean) as number[];
+            if (times.length > 0) {
+                start = new Date(Math.min(...times));
+                end = new Date(Math.max(...times));
+            }
+        }
+
+        // Space out timeline if there's only a single date to avoid the weird single-column overlap collapse
+        if (!useRange && start.getTime() === end.getTime() && mgspStiks.length > 0) {
+            start = new Date(start);
+            end = new Date(end);
+            if (period === 'day') {
+                start.setDate(start.getDate() - 1);
+                end.setDate(end.getDate() + 1);
+            } else if (period === 'month') {
+                start.setMonth(start.getMonth() - 1);
+                end.setMonth(end.getMonth() + 1);
+            } else if (period === 'year') {
+                start.setFullYear(start.getFullYear() - 1);
+                end.setFullYear(end.getFullYear() + 1);
+            }
+        }
+
         const tm = new Map<string, Record<string, number>>();
+
+        if (mgspStiks.length > 0) {
+            let curr = new Date(start);
+            while (curr <= end) {
+                const k = formatKey(curr, period);
+                if (!tm.has(k)) tm.set(k, {});
+                if (period === 'day') curr.setDate(curr.getDate() + 1);
+                else if (period === 'month') curr.setMonth(curr.getMonth() + 1);
+                else curr.setFullYear(curr.getFullYear() + 1);
+            }
+            const endK = formatKey(end, period);
+            if (!tm.has(endK)) tm.set(endK, {});
+        }
+
         finalStiks.forEach(s => {
             if (!s.date) return;
             const k = formatKey(s.date, period);
@@ -205,8 +205,18 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
             e[s.destName] = (e[s.destName] || 0) + 1;
             tm.set(k, e);
         });
-        return Array.from(tm.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => ({ key, label: formatLabel(key, period, lang), ...vals }));
-    }, [finalStiks, period, lang]);
+
+        const allDests = new Set<string>();
+        finalStiks.forEach(s => { if (s.date) allDests.add(s.destName); });
+
+        return Array.from(tm.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => {
+            const populatedVals: Record<string, any> = { ...vals };
+            allDests.forEach(dest => {
+                if (populatedVals[dest] === undefined) populatedVals[dest] = 0;
+            });
+            return { key, label: formatLabel(key, period, lang), ...populatedVals };
+        });
+    }, [finalStiks, period, lang, rStart, rEnd, useRange, mgspStiks]);
 
     const totalStiks = finalStiks.length;
 
