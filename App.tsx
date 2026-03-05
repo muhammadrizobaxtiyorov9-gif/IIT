@@ -483,9 +483,9 @@ const App: React.FC = () => {
         reports.forEach(r => {
           combinedRawData += `\n--- [${r.date}] ---\n` + (r.rawData || "");
           if (r.wagons) {
-            // Rehydrate each report's wagons using its own sections pool before merging
             const rehydrated = rehydrateWagons(r.wagons, staticStations, r.sections || []);
             rehydrated.forEach(w => {
+              w.reportDate = r.date; // Inject DB reporting date (18:00 cutoff)
               // Key by wagon number
               if (w.number) uniqueWagons.set(w.number, w);
             });
@@ -621,6 +621,8 @@ const App: React.FC = () => {
         // Parse wagons for this specific date
         const { wagons: parsedWagons, errors: chunkErrors } = await runParserAsync(chunkRawData);
 
+        parsedWagons.forEach(w => w.reportDate = dateStr); // Inject date
+
         if (chunkErrors.length > 0) {
           allValidationErrors.push(...chunkErrors);
         }
@@ -661,6 +663,7 @@ const App: React.FC = () => {
       // Handle 'unknown' date group if exists (only for viewing, or warn)
       if (groupedData['unknown']) {
         const { wagons: unknownWagons, errors: unknownErrors } = await runParserAsync(groupedData['unknown']);
+        unknownWagons.forEach(w => w.reportDate = 'unknown');
         allSavedWagons.push(...unknownWagons);
         if (unknownErrors.length > 0) allValidationErrors.push(...unknownErrors);
         if (shouldSave) {
@@ -1168,6 +1171,8 @@ const App: React.FC = () => {
                       lang={lang}
                       t={t}
                       selectedDate={dateRange.endDate}
+                      dateRange={dateRange}
+                      onDateRangeChange={handleRangeSelect}
                       onDeleteTrain={handleDeleteTrain}
                     />
                   </div>

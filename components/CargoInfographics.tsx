@@ -509,48 +509,8 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
             {/* Extended Visual Charts Row */}
             <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                {/* Wagon Types Donut Chart */}
-                <div className="col-span-1 bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-hidden flex flex-col justify-between h-full">
-                    <div>
-                        <h3 className="text-lg font-black text-slate-800 mb-4 relative z-10">{lang === 'uz' ? 'Vagon turlari' : 'Типы вагонов (по весу)'}</h3>
-                        <div className="h-[220px] relative z-10 w-full flex-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={extendedInsights.wagonTypes}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={70}
-                                        outerRadius={95}
-                                        paddingAngle={4}
-                                        dataKey="value"
-                                        stroke="none"
-                                        cornerRadius={8}
-                                    >
-                                        {extendedInsights.wagonTypes.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <RechartsTooltip content={<CustomTooltip />} />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                    <div className="mt-8 flex flex-col gap-2.5 relative z-10">
-                        {extendedInsights.wagonTypes.map((t, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-xs bg-slate-50/50 px-3 py-2 rounded-xl border border-slate-100/50">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: COLORS[(idx + 3) % COLORS.length] }}></div>
-                                    <span className="text-slate-600 font-bold truncate max-w-[120px]">{t.name}</span>
-                                </div>
-                                <span className="font-black text-slate-800">{(t.value / 1000).toFixed(1)}k <span className="text-[10px] text-slate-400 font-bold">т</span></span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
                 {/* Daily Arrival Dynamics Area Chart & Top Stations */}
-                <div className="col-span-1 lg:col-span-2 grid grid-rows-2 gap-6">
+                <div className="col-span-1 lg:col-span-3 grid grid-rows-2 gap-6">
 
                     {/* Area Chart: Timeline */}
                     <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 flex flex-col">

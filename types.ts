@@ -57,6 +57,7 @@ export interface Wagon {
   entryPoint?: Station; // Incoming border point (CППB)
   trainIndex?: string; // The specific train identifier e.g. "(6980+05+7400)" or "(:902 ...)"
   arrivalDate?: Date; // Parsed arrival/entry time
+  reportDate?: string; // Injected YYYY-MM-DD from the DB (respecting 18:00 rule)
   rawBlock?: string; // Original raw text block for this train
   routeVerification?: RouteVerification; // Advanced AI/Parser analytics
 }

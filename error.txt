@@ -1,0 +1,5 @@
+
+> жд-аналитика-(railway-analytics)@0.0.0 npx
+> tsc --noEmit
+
+components/TrainInfographics.tsx(400,54): error TS2304: Cannot find name 'LabelList'.

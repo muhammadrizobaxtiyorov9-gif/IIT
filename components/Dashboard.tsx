@@ -18,6 +18,8 @@ interface DashboardProps {
    lang: Language;
    t: (key: string) => string;
    selectedDate: string;
+   dateRange?: any;
+   onDateRangeChange?: (newRange: any) => void;
    onDeleteTrain?: (trainIndex: string) => void;
 }
 
@@ -109,7 +111,7 @@ const getTrainStats = (wagons: Wagon[], stations: Station[]) => {
    return stats;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lang, t, selectedDate, onDeleteTrain }) => {
+const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lang, t, selectedDate, dateRange, onDateRangeChange, onDeleteTrain }) => {
    const [selectedRegion, setSelectedRegion] = useState<string>('all');
    const [selectedDestination, setSelectedDestination] = useState<string>('all');
    const [searchQuery, setSearchQuery] = useState<string>('');
@@ -689,8 +691,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
             </div>
          ) : (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <TrainInfographics wagons={filteredWagons} stations={stations} lang={lang} />
-
+               <TrainInfographics wagons={filteredWagons} stations={stations} lang={lang} dateRange={dateRange} onDateRangeChange={onDateRangeChange} />
             </div>
          )}
 

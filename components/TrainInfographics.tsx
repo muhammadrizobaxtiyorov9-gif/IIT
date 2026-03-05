@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Wagon, Station, Language } from '../types';
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid,
-    Tooltip as RechartsTooltip, ResponsiveContainer,
-    LineChart, Line, Legend, LabelList
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+    AreaChart, Area, Legend, PieChart, Pie, Cell, LabelList
 } from 'recharts';
 import {
-    TrainFront, MapPin, Calendar, Search, BarChart3,
-    Activity, ArrowRight, Package, TrendingUp, Info, CheckCircle2
+    TrainFront, MapPin, Activity, ArrowRight, TrendingUp, Info, CheckCircle2,
+    CalendarDays, BarChart3, PieChart as PieIcon, Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { normalizeMgspName } from '../utils/stationUtils';
@@ -16,16 +15,28 @@ interface TrainInfographicsProps {
     wagons: Wagon[];
     stations: Station[];
     lang: Language;
+    dateRange?: any;
+    onDateRangeChange?: (range: any) => void;
 }
 
 const PALETTE = [
-    '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899',
-    '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6',
-    '#06b6d4', '#0ea5e9', '#84cc16', '#ef4444', '#64748b',
+    '#6366f1', '#8b5cf6', '#ec4899', '#f97316', '#eab308',
+    '#10b981', '#0ea5e9', '#f43f5e', '#a855f7', '#14b8a6',
+    '#3b82f6', '#84cc16', '#06b6d4', '#ef4444', '#cbd5e1'
 ];
 
-// Removed redundant KNOWN_CODES and matchMgspRobust because 
-// we now use the single source of truth: normalizeMgspName
+type ViewMode = 'current' | 'dynamics';
+type PeriodType = 'day' | 'month';
+
+interface StikRecord {
+    idx: string;
+    fromCode: string;
+    toCode: string;
+    mgsp: string;
+    reportDate: string; // The injected 18:00 strict reporting date
+    wagons: number;
+    destName: string;
+}
 
 const resolveStation = (code: string, stations: Station[]): string => {
     if (!code) return code;
@@ -34,34 +45,18 @@ const resolveStation = (code: string, stations: Station[]): string => {
     return found ? found.name : code;
 };
 
-const toDate = (raw: any): Date | null => {
-    if (!raw) return null;
-    const d = raw instanceof Date ? raw : new Date(raw);
-    return isNaN(d.getTime()) ? null : d;
-};
-
-type PeriodType = 'day' | 'month' | 'year';
-const formatKey = (d: Date, p: PeriodType) => p === 'day' ? d.toISOString().slice(0, 10) : p === 'month' ? d.toISOString().slice(0, 7) : String(d.getFullYear());
-const formatLabel = (key: string, p: PeriodType, lang: Language) => {
-    if (p === 'day') return new Date(key + 'T00:00:00').toLocaleDateString(lang === 'uz' ? 'uz-UZ' : 'ru-RU', { day: '2-digit', month: 'short' });
-    if (p === 'month') { const [y, m] = key.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString(lang === 'uz' ? 'uz-UZ' : 'ru-RU', { month: 'short', year: 'numeric' }); }
-    return key;
-};
-
-// ─── Render explicit text inside / on top of bars ───
-const CustomLabel = (props: any) => {
-    const { x, y, width, height, value } = props;
+// Extracted the custom Label outside so Recharts doesn't get confused
+const CustomBarLabel = (props: any) => {
+    const { x, y, width, value } = props;
     if (!value || value === 0) return null;
-
-    // Position text in the center-top of the column
     return (
         <text
             x={x + width / 2}
-            y={y - 8} // 8px above the top of the bar
+            y={y - 12}
             fill="#475569"
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize="11"
+            fontSize="14"
             fontWeight="900"
         >
             {value}
@@ -69,39 +64,32 @@ const CustomLabel = (props: any) => {
     );
 };
 
-interface StikRecord {
-    idx: string;
-    fromCode: string;
-    toCode: string;
-    mgsp: string;
-    date: Date | null;
-    wagons: number;
-    destName: string;
-}
-
-const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations, lang }) => {
+const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations, lang, dateRange, onDateRangeChange }) => {
+    const [viewMode, setViewMode] = useState<ViewMode>('current');
     const [selectedMgsp, setSelectedMgsp] = useState<string | null>(null);
     const [period, setPeriod] = useState<PeriodType>('day');
-    const [useRange, setUseRange] = useState(false);
-    const [rangeStart, setRangeStart] = useState('');
-    const [rangeEnd, setRangeEnd] = useState('');
-    const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
     const [search, setSearch] = useState('');
 
-    // ── Build Stiks using Robust Match ──
+    // ── Build Stiks using Strictly Database Dates (reportDate) ──
     const stikList = useMemo((): StikRecord[] => {
         const map = new Map<string, StikRecord>();
         wagons.forEach(w => {
             const key = (w.trainIndex || '').trim();
             if (!key) return;
-            if (map.has(key)) {
-                const ex = map.get(key)!;
+
+            // Strict use of the injected report date. If missing somehow, stringify arrival
+            const defaultDateStr = w.arrivalDate ? w.arrivalDate.toISOString().slice(0, 10) : 'unknown';
+            const rDate = w.reportDate || defaultDateStr;
+
+            // Strict use of trainIndex only, so counts perfectly match the global dataset.
+            const uniqueKey = key;
+
+            if (map.has(uniqueKey)) {
+                const ex = map.get(uniqueKey)!;
                 ex.wagons++;
-                if (!ex.date) { const d = toDate(w.arrivalDate || (w as any).ad); if (d) ex.date = d; }
                 return;
             }
 
-            // Safe destination extraction
             let searchArea = key;
             const parenMatch = key.match(/\((.*?)\)/);
             if (parenMatch) searchArea = parenMatch[1];
@@ -112,7 +100,6 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
                 toCode = parts[parts.length - 1];
             }
 
-            // Sync MGSP Identification strictly with Report Component (stationUtils.ts)
             let rawMgsp = normalizeMgspName(w.entryPoint, key);
             let mgsp = rawMgsp === 'ПРОЧИЕ' ? 'Неизвестно' : rawMgsp;
 
@@ -120,9 +107,7 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
             if (!destName || destName === toCode) destName = w.matchedStation?.name || w.destinationStation || '';
             if (!destName) destName = (lang === 'uz' ? 'Nomaʼlum st.' : 'Неизвестная ст.');
 
-            const date = toDate(w.arrivalDate || (w as any).ad);
-
-            map.set(key, { idx: key, fromCode: '', toCode: toCode, mgsp, destName, date, wagons: 1 });
+            map.set(uniqueKey, { idx: key, fromCode: '', toCode, mgsp, destName, reportDate: rDate, wagons: 1 });
         });
         return Array.from(map.values());
     }, [wagons, stations, lang]);
@@ -132,126 +117,133 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
         const cnt = new Map<string, number>();
         stikList.forEach(s => cnt.set(s.mgsp, (cnt.get(s.mgsp) || 0) + 1));
         return Array.from(cnt.entries())
-            .sort((a, b) => b[1] - a[1]) // highest traffic first
+            .sort((a, b) => b[1] - a[1])
             .map(([name, count]) => ({ name, count }));
     }, [stikList]);
 
     const effectiveMgsp = selectedMgsp ?? mgspList[0]?.name ?? null;
     const mgspStiks = useMemo(() => stikList.filter(s => s.mgsp === effectiveMgsp), [stikList, effectiveMgsp]);
 
-    // ── Dates ──
-    const allDates = useMemo(() => mgspStiks.map(s => s.date).filter(Boolean) as Date[], [mgspStiks]);
-    const minD = allDates.length ? new Date(Math.min(...allDates.map(d => d.getTime()))) : new Date();
-    const maxD = allDates.length ? new Date(Math.max(...allDates.map(d => d.getTime()))) : new Date();
-    const rStart = useRange && rangeStart ? new Date(rangeStart + 'T00:00:00') : minD;
-    const rEnd = useRange && rangeEnd ? new Date(rangeEnd + 'T23:59:59') : maxD;
-
-    const finalStiks = useMemo(() => mgspStiks.filter(s => !s.date || (s.date >= rStart && s.date <= rEnd)), [mgspStiks, rStart, rEnd]);
-
-    // ── Chart Data ──
-    const uniqueDests = useMemo(() => {
+    // ── CURRENT VIEW (Joriy Holat) LOGIC ──
+    const currentViewData = useMemo(() => {
         const c = new Map<string, number>();
-        finalStiks.forEach(s => c.set(s.destName, (c.get(s.destName) || 0) + 1));
-        return Array.from(c.entries()).sort((a, b) => b[1] - a[1]).map(([n]) => n);
-    }, [finalStiks]);
+        mgspStiks.forEach(s => c.set(s.destName, (c.get(s.destName) || 0) + 1));
+        const arr = Array.from(c.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count);
+        return arr;
+    }, [mgspStiks]);
 
-    const chartData = useMemo(() => {
-        let start = rStart;
-        let end = rEnd;
+    // ── DYNAMICS VIEW (Taqqoslash) LOGIC ──
+    const dynamicsUniqueDests = useMemo(() => {
+        const c = new Set<string>();
+        mgspStiks.forEach(s => c.add(s.destName));
+        return Array.from(c);
+    }, [mgspStiks]);
 
-        if (!useRange && mgspStiks.length > 0) {
-            const times = mgspStiks.map(s => s.date?.getTime()).filter(Boolean) as number[];
-            if (times.length > 0) {
-                start = new Date(Math.min(...times));
-                end = new Date(Math.max(...times));
-            }
-        }
+    const dynamicsData = useMemo(() => {
+        if (!mgspStiks.length) return [];
 
-        // Space out timeline if there's only a single date to avoid the weird single-column overlap collapse
-        if (!useRange && start.getTime() === end.getTime() && mgspStiks.length > 0) {
-            start = new Date(start);
-            end = new Date(end);
-            if (period === 'day') {
-                start.setDate(start.getDate() - 1);
-                end.setDate(end.getDate() + 1);
-            } else if (period === 'month') {
-                start.setMonth(start.getMonth() - 1);
-                end.setMonth(end.getMonth() + 1);
-            } else if (period === 'year') {
-                start.setFullYear(start.getFullYear() - 1);
-                end.setFullYear(end.getFullYear() + 1);
-            }
-        }
+        // Build continuous timeline array bridging min and max purely from string bounds!
+        let allDates = mgspStiks.map(s => s.reportDate).filter(d => d !== 'unknown').sort();
+        if (allDates.length === 0) return [];
+
+        let startStr = allDates[0];
+        let endStr = allDates[allDates.length - 1];
+
+        // Format rules based on period requested
+        const formatStr = (dStr: string, p: PeriodType) => p === 'day' ? dStr : dStr.substring(0, 7);
 
         const tm = new Map<string, Record<string, number>>();
 
-        if (mgspStiks.length > 0) {
-            let curr = new Date(start);
-            while (curr <= end) {
-                const k = formatKey(curr, period);
-                if (!tm.has(k)) tm.set(k, {});
-                if (period === 'day') curr.setDate(curr.getDate() + 1);
-                else if (period === 'month') curr.setMonth(curr.getMonth() + 1);
-                else curr.setFullYear(curr.getFullYear() + 1);
+        // If 'day', build every single day
+        if (period === 'day') {
+            let curr = new Date(startStr + 'T12:00:00Z');
+            const end = new Date(endStr + 'T12:00:00Z');
+            // padding if only one day to show a dynamic peak
+            if (curr.getTime() === end.getTime()) {
+                curr.setDate(curr.getDate() - 1);
+                end.setDate(end.getDate() + 1);
             }
-            const endK = formatKey(end, period);
-            if (!tm.has(endK)) tm.set(endK, {});
+            while (curr <= end) {
+                const k = curr.toISOString().slice(0, 10);
+                if (!tm.has(k)) tm.set(k, {});
+                curr.setDate(curr.getDate() + 1);
+            }
+        } else {
+            // If 'month', build every month
+            let [y1, m1] = startStr.substring(0, 7).split('-').map(Number);
+            let [y2, m2] = endStr.substring(0, 7).split('-').map(Number);
+
+            // pad if single month
+            if (y1 === y2 && m1 === m2) {
+                m1--; if (m1 < 1) { m1 = 12; y1--; }
+                m2++; if (m2 > 12) { m2 = 1; y2++; }
+            }
+
+            let cy = y1; let cm = m1;
+            while (cy < y2 || (cy === y2 && cm <= m2)) {
+                const k = `${cy}-${cm.toString().padStart(2, '0')}`;
+                if (!tm.has(k)) tm.set(k, {});
+                cm++;
+                if (cm > 12) { cm = 1; cy++; }
+            }
         }
 
-        finalStiks.forEach(s => {
-            if (!s.date) return;
-            const k = formatKey(s.date, period);
+        mgspStiks.forEach(s => {
+            if (s.reportDate === 'unknown') return;
+            const k = formatStr(s.reportDate, period);
             const e = tm.get(k) || {};
-            e[s.destName] = (e[s.destName] || 0) + 1;
+            e[s.destName] = (e[s.destName] || 0) + 1; // Count STICKS not wagons
             tm.set(k, e);
         });
 
-        const allDests = new Set<string>();
-        finalStiks.forEach(s => { if (s.date) allDests.add(s.destName); });
-
         return Array.from(tm.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([key, vals]) => {
-            const populatedVals: Record<string, any> = { ...vals };
-            allDests.forEach(dest => {
-                if (populatedVals[dest] === undefined) populatedVals[dest] = 0;
+            // Fill missing destinations with 0 for Area graphs so color smoothly floors out
+            const obj: any = { key, ...vals };
+            dynamicsUniqueDests.forEach(d => {
+                if (obj[d] === undefined) obj[d] = 0;
             });
-            return { key, label: formatLabel(key, period, lang), ...populatedVals };
+            // Human readable label
+            if (period === 'day') {
+                const [y, m, d] = key.split('-');
+                obj.label = `${d}.${m}.${y}`;
+            } else {
+                const [y, m] = key.split('-');
+                const uzMonths = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+                const ruMonths = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+                obj.label = `${lang === 'uz' ? uzMonths[parseInt(m) - 1] : ruMonths[parseInt(m) - 1]} ${y}`;
+            }
+            return obj;
         });
-    }, [finalStiks, period, lang, rStart, rEnd, useRange, mgspStiks]);
-
-    const totalStiks = finalStiks.length;
-
-    const applyPreset = (p: 'week' | 'month' | 'quarter') => {
-        const end = new Date(); const start = new Date();
-        if (p === 'week') start.setDate(start.getDate() - 7);
-        else if (p === 'month') start.setMonth(start.getMonth() - 1);
-        else start.setMonth(start.getMonth() - 3);
-        setRangeStart(start.toISOString().slice(0, 10)); setRangeEnd(end.toISOString().slice(0, 10)); setUseRange(true);
-    };
+    }, [mgspStiks, period, dynamicsUniqueDests, lang]);
 
     const filteredMgsp = search.trim() ? mgspList.filter(m => m.name.toLowerCase().includes(search.toLowerCase())) : mgspList;
 
-    if (!wagons.length) return <div className="p-20 text-center text-slate-400 font-bold">{lang === 'uz' ? 'Ma\'lumot yo\'q' : 'Нет данных'}</div>;
+    if (!wagons.length) return <div className="p-20 flex flex-col items-center justify-center text-slate-400 font-bold"><Layers className="w-16 h-16 opacity-20 mb-4" />{lang === 'uz' ? 'Ma\'lumot yo\'q' : 'Нет данных'}</div>;
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    // ── Shared Tooltip ──
+    const CustomSharedTooltip = ({ active, payload, label }: any) => {
         if (!active || !payload?.length) return null;
-        const total = payload.reduce((s: number, p: any) => s + (p.value || 0), 0);
+        // Total sum
+        const total = payload.reduce((sum: number, entry: any) => sum + (entry.value || 0), 0);
+
         return (
-            <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] border border-slate-100/50 p-4 text-xs" style={{ minWidth: 240 }}>
-                <p className="font-black text-slate-800 mb-3 pb-2 border-b border-slate-100 text-sm">{label}</p>
-                <div className="space-y-2">
-                    {[...payload].filter(p => p.value > 0).sort((a, b) => b.value - a.value).map((p: any, i: number) => (
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15)] border border-slate-100 p-5 min-w-[260px] relative z-50">
+                <p className="font-black text-slate-800 text-lg mb-4 pb-3 border-b border-slate-100 flex items-center justify-between">
+                    <span>{label}</span>
+                    <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500">{total} {lang === 'uz' ? 'poezd' : 'шт'}</span>
+                </p>
+                <div className="space-y-3">
+                    {[...payload].sort((a, b) => b.value - a.value).filter(p => viewMode === 'current' || p.value > 0).map((p: any, i: number) => (
                         <div key={i} className="flex justify-between items-center group">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: p.fill || p.color }} />
-                                <span className="font-bold text-slate-600 truncate max-w-[150px]">{p.name}</span>
+                            <div className="flex items-center gap-3">
+                                <span className="w-3 h-3 rounded-full flex-shrink-0 shadow-inner" style={{ backgroundColor: p.fill || p.color }} />
+                                <span className="font-bold text-slate-600 truncate max-w-[160px] cursor-default" title={p.name}>{p.name}</span>
                             </div>
-                            <span className="font-black text-slate-900 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-100">{p.value}</span>
+                            <span className="font-black text-slate-900 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{p.value}</span>
                         </div>
                     ))}
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-100 flex justify-between font-bold text-slate-500 bg-slate-50/50 -mx-4 -mb-4 p-4 rounded-b-2xl">
-                    <span>{lang === 'uz' ? 'Shu davrdagi jami:' : 'Итого за период:'}</span>
-                    <span className="font-black text-blue-600 text-sm">{total} {lang === 'uz' ? 'ta' : 'шт'}</span>
                 </div>
             </div>
         );
@@ -259,41 +251,61 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
 
     return (
         <div className="flex flex-col xl:flex-row gap-6">
-            {/* ══ LEFT SIDEBAR ══ */}
-            <div className="w-full xl:w-[300px] flex-shrink-0 flex flex-col gap-4">
-                <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-3xl p-6 shadow-xl shadow-indigo-500/20 text-white relative overflow-hidden">
-                    <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                    <p className="text-[11px] font-black uppercase text-indigo-200 tracking-widest mb-2 flex items-center gap-1.5"><MapPin className="w-4 h-4" /> {lang === 'uz' ? 'Tizimdagi jami poezdlar' : 'Всего поездов в системе'}</p>
-                    <div className="text-5xl font-black mb-1">{stikList.length}</div>
-                    <p className="text-indigo-200 text-xs font-bold">{lang === 'uz' ? 'barcha MGSP punktlaridan' : 'со всех точек МГСП'}</p>
+            {/* ══ LEFT SIDEBAR (Ultra Modern) ══ */}
+            <div className="w-full xl:w-[320px] flex-shrink-0 flex flex-col gap-6">
+                <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-900 rounded-[2rem] p-7 shadow-2xl shadow-indigo-500/30 text-white relative overflow-hidden group">
+                    <div className="absolute -right-10 -top-10 w-48 h-48 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all duration-700"></div>
+                    <div className="absolute right-4 bottom-4 w-24 h-24 bg-indigo-500/30 rounded-full blur-2xl"></div>
+
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-2 text-indigo-200 mb-4 bg-indigo-900/40 w-max px-3 py-1.5 rounded-xl border border-indigo-400/20 backdrop-blur-md">
+                            <Layers className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">{lang === 'uz' ? 'Jami Tizimda' : 'Всего в системе'}</span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mb-2">
+                            <span className="text-6xl font-black tracking-tight">{stikList.length}</span>
+                            <span className="text-indigo-300 font-bold">{lang === 'uz' ? 'poezd' : 'шт'}</span>
+                        </div>
+                        <p className="text-indigo-200 text-xs font-bold leading-relaxed opacity-80">
+                            {lang === 'uz' ? 'Tanlangan muddat bo\'yicha barcha "Отчет" sanalaridagi jami stiklar.' : 'Все стики во всем диапазоне дат выгрузки.'}
+                        </p>
+                    </div>
                 </div>
 
-                <div className="bg-white rounded-3xl border border-slate-200/60 shadow-lg shadow-slate-100 flex flex-col flex-1 h-[600px]">
-                    <div className="p-4 bg-slate-50 rounded-t-3xl border-b border-slate-100 flex items-center justify-between">
-                        <p className="text-[11px] font-black text-slate-600 uppercase tracking-widest">{lang === 'uz' ? 'MGSP (Kirish punktlari)' : 'МГСП (Точки входа)'}</p>
-                        <span className="bg-white py-0.5 px-2 rounded-lg text-[10px] font-black text-indigo-600 border border-indigo-100 shadow-sm">{mgspList.length}</span>
-                    </div>
-                    <div className="p-3 border-b border-slate-50 bg-white">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-300" />
-                            <input value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 rounded-xl text-xs font-bold text-slate-700 outline-none border border-slate-100 focus:border-indigo-300 transition-all placeholder:text-slate-400" placeholder={lang === 'uz' ? 'Stikni qidirish...' : 'Поиск МГСП...'} />
+                <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-xl shadow-slate-200/50 flex flex-col flex-1 h-[600px] overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <h3 className="font-black text-slate-800 flex items-center gap-2">
+                            <MapPin className="w-5 h-5 text-indigo-500" />
+                            {lang === 'uz' ? 'MGSP Kirish' : 'Точки Входа'}
+                        </h3>
+                        <div className="bg-indigo-100 text-indigo-700 w-7 h-7 flex items-center justify-center rounded-full font-black text-xs">
+                            {mgspList.length}
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2">
+                    <div className="p-4 border-b border-slate-100">
+                        <input
+                            value={search} onChange={e => setSearch(e.target.value)}
+                            className="w-full bg-slate-100 border-none px-5 py-3 rounded-2xl text-sm font-bold text-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            placeholder={lang === 'uz' ? 'Izlash...' : 'Поиск...'}
+                        />
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
                         {filteredMgsp.map((m, i) => {
                             const act = m.name === effectiveMgsp;
                             return (
                                 <button key={m.name} onClick={() => setSelectedMgsp(m.name)}
-                                    className={`group w-full flex items-center justify-between p-3 rounded-2xl mb-1.5 transition-all duration-300
-                                        ${act ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-500/25 scale-[1.02]'
+                                    className={`group relative w-full flex items-center justify-between p-4 rounded-2xl transition-all duration-300 overflow-hidden
+                                        ${act ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 scale-[1.02] border-transparent'
                                             : m.name === 'Неизвестно' ? 'bg-rose-50 border border-rose-100 text-rose-700 hover:bg-rose-100'
-                                                : 'bg-white border border-slate-100 hover:border-slate-300 hover:shadow-md text-slate-700'}`}>
-                                    <div className="flex items-center gap-3 truncate">
-                                        <div className={`w-6 h-6 rounded-xl flex items-center justify-center text-[10px] font-black transition-colors ${act ? 'bg-white/20 text-white' : m.name === 'Неизвестно' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>{i + 1}</div>
-                                        <span className="text-xs font-black truncate tracking-wide">{m.name}</span>
+                                                : 'bg-white border border-slate-100 hover:border-slate-300 hover:shadow-md text-slate-700 hover:bg-slate-50'}`}>
+                                    {act && <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 translate-x-[-100%] group-hover:animate-shimmer"></div>}
+                                    <div className="flex items-center gap-3 relative z-10">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-colors ${act ? 'bg-white/20 text-white' : m.name === 'Неизвестно' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>{i + 1}</div>
+                                        <span className="font-black text-sm">{m.name}</span>
                                     </div>
-                                    <div className={`flex items-center gap-1.5 text-[11px] font-black px-2.5 py-1 rounded-lg ${act ? 'bg-white/20 text-white' : m.name === 'Неизвестно' ? 'bg-rose-100/50 text-rose-600' : 'bg-slate-50 text-slate-500'}`}>
-                                        {m.count} <TrainFront className="w-3 h-3 opacity-70" />
+                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl relative z-10 transition-colors ${act ? 'bg-black/20 text-white' : m.name === 'Неизвестно' ? 'bg-rose-100/80 text-rose-600' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
+                                        <span className="font-black text-sm">{m.count}</span>
+                                        <TrainFront className="w-4 h-4 opacity-70" />
                                     </div>
                                 </button>
                             );
@@ -302,148 +314,229 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
                 </div>
             </div>
 
-            {/* ══ RIGHT PANEL ══ */}
+            {/* ══ RIGHT PANEL (Analytics Hub) ══ */}
             <div className="flex-1 min-w-0 flex flex-col gap-6">
 
-                {/* ── Context Header ── */}
-                <div className="bg-white rounded-3xl border border-slate-200/60 shadow-lg shadow-slate-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="flex items-center gap-5">
-                        <div className="relative">
-                            <div className="p-4 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-2xl">
-                                <TrainFront className="w-8 h-8" />
-                            </div>
-                            <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-1 rounded-xl ring-4 ring-white shadow-sm">
-                                <CheckCircle2 className="w-4 h-4" />
-                            </div>
+                {/* Top Segmentation Control & Header Info */}
+                <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-xl shadow-slate-200/50 p-6 flex flex-col items-center justify-between gap-6 xl:flex-row">
+                    <div className="flex items-center gap-4 w-full xl:w-auto">
+                        <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shadow-inner flex-shrink-0">
+                            <TrainFront className="w-8 h-8" />
                         </div>
-                        <div>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1.5 flex items-center gap-1.5">
-                                <ArrowRight className="w-3.5 h-3.5 text-indigo-400" /> {lang === 'uz' ? 'Faol MGSP stik:' : 'Активный МГСП:'}
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 flex-shrink-0" /> <span className="truncate">{lang === 'uz' ? 'Tanlangan MGSP' : 'Выбранный МГСП'}</span>
                             </p>
-                            <h2 className="text-3xl font-black text-slate-800 tracking-tight">{effectiveMgsp}</h2>
-                        </div>
-                    </div>
-                    <div className="flex gap-3">
-                        <div className="text-right px-5 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{lang === 'uz' ? 'Jami poezdlar' : 'Всего поездов'}</p>
-                            <p className="text-2xl font-black text-slate-800">{totalStiks}</p>
-                        </div>
-                        <div className="text-right px-5 py-3 bg-blue-50 rounded-2xl border border-blue-100">
-                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">{lang === 'uz' ? 'Yo\'nalishlar' : 'Направлений'}</p>
-                            <p className="text-2xl font-black text-blue-700">{uniqueDests.length}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Controls Row ── */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-3 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-100 w-full sm:w-auto">
-                        <div className="flex items-center bg-white rounded-lg p-1 border border-slate-200 shadow-sm w-full sm:w-auto">
-                            {(['day', 'month', 'year'] as PeriodType[]).map(p => (
-                                <button key={p} onClick={() => setPeriod(p)} className={`flex-1 px-4 py-1.5 text-[11px] font-black rounded-md transition-colors ${period === p ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
-                                    {p === 'day' ? (lang === 'uz' ? 'Kunlik' : 'По дням') : p === 'month' ? (lang === 'uz' ? 'Oylik' : 'По месяцам') : (lang === 'uz' ? 'Yillik' : 'По годам')}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="w-px h-6 bg-slate-200 mx-2 hidden sm:block"></div>
-                        <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                            <button onClick={() => setUseRange(!useRange)} className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-[11px] font-black border transition-all ${useRange ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'}`}>
-                                📅 {lang === 'uz' ? 'Interval' : 'Фильтр дат'}
-                            </button>
-                            <AnimatePresence>
-                                {useRange && (
-                                    <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 'auto', opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 overflow-hidden">
-                                        <input type="date" value={rangeStart} onChange={e => setRangeStart(e.target.value)} className="py-1 text-[11px] font-bold text-slate-700 bg-transparent outline-none w-24" />
-                                        <span className="text-slate-300">-</span>
-                                        <input type="date" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} className="py-1 text-[11px] font-bold text-slate-700 bg-transparent outline-none w-24" />
-                                        <button onClick={() => { setRangeStart(''); setRangeEnd(''); setUseRange(false) }} className="text-rose-500 text-lg px-1 font-black hover:text-rose-600">&times;</button>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Main Dynamic Chart (Grouped Bars with direct Labels) ── */}
-                <div className="bg-white rounded-3xl border border-slate-200/60 shadow-lg shadow-slate-100 p-6 flex-1 min-h-[450px] relative">
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 tracking-tight">
-                                <TrendingUp className="w-5 h-5 text-indigo-500" />
-                                {lang === 'uz' ? `${effectiveMgsp} => Qaysi stansiyaga qachon nechtadan?` : `График поездов из ${effectiveMgsp} по пунктам назначения`}
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 mt-1">
-                                {lang === 'uz' ? 'Har bir ustunda yo\'nalishlarning aniq stik sonlari birma-bir ko\'rsatilgan' : 'Каждый столбец наглядно показывает количество поездов для каждого направления в отдельности'}
-                            </p>
-                        </div>
-                        <div className="flex bg-slate-50 border border-slate-200 rounded-xl p-1 shadow-inner">
-                            <button onClick={() => setChartType('bar')} className={`p-2 rounded-lg transition-all ${chartType === 'bar' ? 'bg-white shadow-sm text-indigo-600 ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}><BarChart3 className="w-4 h-4" /></button>
-                            <button onClick={() => setChartType('line')} className={`p-2 rounded-lg transition-all ${chartType === 'line' ? 'bg-white shadow-sm text-indigo-600 ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}><Activity className="w-4 h-4" /></button>
+                            <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight truncate">{effectiveMgsp}</h2>
                         </div>
                     </div>
 
-                    {chartData.length > 0 && uniqueDests.length > 0 ? (
-                        <div style={{ height: Math.max(350, Math.min(chartData.length * 80, 550)) }} className="mt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                                {chartType === 'bar' ? (
-                                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: -20, bottom: 0 }} barGap={8} barCategoryGap="25%">
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 800, fill: '#475569' }} dy={10} />
-                                        <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 800, fill: '#cbd5e1' }} />
-                                        <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc', opacity: 0.6 }} />
-                                        <Legend iconType="circle" iconSize={10} wrapperStyle={{ paddingTop: 30 }} formatter={v => <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155' }}>{v}</span>} />
-                                        {/* Notice NO stackId -> Bars are rendered side-by-side grouped by Date! */}
-                                        {uniqueDests.map((dest, i) => (
-                                            <Bar key={dest} dataKey={dest} name={dest} fill={PALETTE[i % PALETTE.length]} radius={[6, 6, 0, 0]} maxBarSize={50}>
-                                                <LabelList dataKey={dest} content={<CustomLabel />} />
-                                            </Bar>
-                                        ))}
-                                    </BarChart>
+                    <div className="flex flex-col sm:flex-row items-center gap-4 w-full xl:w-auto">
+                        {/* Inline Inline Date Controls */}
+                        {dateRange && onDateRangeChange && (
+                            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-[1.25rem] border border-slate-200 shadow-sm w-full sm:w-auto justify-center">
+                                {viewMode === 'current' ? (
+                                    <div className="relative flex items-center">
+                                        <CalendarDays className="w-4 h-4 text-indigo-500 absolute left-4 pointer-events-none" />
+                                        <input
+                                            type="date"
+                                            className="bg-white border text-sm border-slate-200 text-slate-700 font-bold rounded-xl py-2 pl-10 pr-4 focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-40 font-mono shadow-sm"
+                                            value={dateRange.endDate}
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    onDateRangeChange({ startDate: e.target.value, endDate: e.target.value });
+                                                }
+                                            }}
+                                        />
+                                    </div>
                                 ) : (
-                                    <LineChart data={chartData} margin={{ top: 20, right: 30, left: -20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 800, fill: '#475569' }} dy={10} />
-                                        <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 800, fill: '#cbd5e1' }} />
-                                        <RechartsTooltip content={<CustomTooltip />} />
-                                        <Legend iconType="circle" iconSize={10} wrapperStyle={{ paddingTop: 30 }} formatter={v => <span style={{ fontSize: '12px', fontWeight: 800, color: '#334155' }}>{v}</span>} />
-                                        {uniqueDests.map((dest, i) => (
-                                            <Line key={dest} type="monotone" dataKey={dest} name={dest} stroke={PALETTE[i % PALETTE.length]} strokeWidth={3} dot={{ r: 5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, stroke: PALETTE[i % PALETTE.length], strokeWidth: 3, fill: '#fff' }} />
-                                        ))}
-                                    </LineChart>
+                                    <>
+                                        <input
+                                            type="date"
+                                            className="bg-white border text-sm border-slate-200 text-slate-700 font-bold rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-36 font-mono shadow-sm"
+                                            value={dateRange.startDate}
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    onDateRangeChange({ ...dateRange, startDate: e.target.value });
+                                                }
+                                            }}
+                                        />
+                                        <span className="text-slate-400 font-bold">-</span>
+                                        <input
+                                            type="date"
+                                            className="bg-white border text-sm border-slate-200 text-slate-700 font-bold rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-36 font-mono shadow-sm"
+                                            value={dateRange.endDate}
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    onDateRangeChange({ ...dateRange, endDate: e.target.value });
+                                                }
+                                            }}
+                                        />
+                                    </>
                                 )}
-                            </ResponsiveContainer>
+                            </div>
+                        )}
+
+                        {/* Mode Switcher */}
+                        <div className="flex bg-slate-100 p-1.5 rounded-[1.25rem] border border-slate-200 shadow-inner w-full sm:w-auto">
+                            <button
+                                onClick={() => setViewMode('current')}
+                                className={`flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-[1rem] transition-all font-black text-sm capitalize ${viewMode === 'current' ? 'bg-white shadow-md text-indigo-600 ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                            >
+                                <PieIcon className="w-4 h-4" />
+                                {lang === 'uz' ? 'Joriy' : 'Текущие'}
+                            </button>
+                            <button
+                                onClick={() => setViewMode('dynamics')}
+                                className={`flex flex-1 sm:flex-none items-center justify-center gap-2 px-6 py-2.5 rounded-[1rem] transition-all font-black text-sm capitalize ${viewMode === 'dynamics' ? 'bg-white shadow-md text-indigo-600 ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                            >
+                                <Activity className="w-4 h-4" />
+                                {lang === 'uz' ? 'Dinamika' : 'Динамика'}
+                            </button>
                         </div>
-                    ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-                            <Info className="w-12 h-12 opacity-20 mb-4" />
-                            <p className="font-bold text-lg">{lang === 'uz' ? 'Ushbu davrda qatnovlar yo\'q' : 'Нет данных за этот период'}</p>
-                        </div>
-                    )}
+                    </div>
                 </div>
 
-                {/* ── Summary Cards (Allohsida yacheykalar) ── */}
-                {uniqueDests.length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {uniqueDests.map((dest, i) => {
-                            const cnt = finalStiks.filter(s => s.destName === dest).length;
-                            const color = PALETTE[i % PALETTE.length];
-                            return (
-                                <motion.div key={dest} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                                    className="bg-white rounded-2xl p-4 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.1)] border border-slate-100 relative overflow-hidden group hover:scale-[1.03] transition-transform">
-                                    <div className="absolute top-0 right-0 w-16 h-16 rounded-bl-full bg-slate-50 transition-colors group-hover:bg-slate-100" style={{ opacity: 0.5 }}></div>
-                                    <div className="w-10 h-10 rounded-full flex items-center justify-center mb-3 shadow-sm relative z-10" style={{ backgroundColor: `${color}15` }}>
-                                        <MapPin className="w-5 h-5" style={{ color }} />
+                <AnimatePresence mode="wait">
+                    {/* ========================================================= */}
+                    {/* ==================== CURRENT VIEW ======================= */}
+                    {/* ========================================================= */}
+                    {viewMode === 'current' && (
+                        <motion.div key="current" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="flex flex-col gap-6 w-full">
+
+                            {/* Summary Totals Row */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                {currentViewData.map((d, i) => (
+                                    <div key={d.name} className="bg-white rounded-3xl p-5 border border-slate-100 shadow-lg shadow-slate-200/50 flex flex-col justify-between group hover:-translate-y-1 transition-transform cursor-default">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner" style={{ backgroundColor: `${PALETTE[i % PALETTE.length]}15`, color: PALETTE[i % PALETTE.length] }}>
+                                                <TrendingUp className="w-6 h-6" />
+                                            </div>
+                                            <span className="text-[10px] uppercase tracking-wider font-black text-slate-400 px-2 py-1 bg-slate-50 rounded-lg">{d.count} {lang === 'uz' ? 'ta' : 'шт'}</span>
+                                        </div>
+                                        <div className="mb-1">
+                                            <h4 className="text-3xl font-black text-slate-800">{d.count}</h4>
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-500 truncate" title={d.name}>{d.name}</span>
+                                        {/* Micro progress bar relative to total */}
+                                        <div className="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
+                                            <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${(d.count / mgspStiks.length) * 100}%`, backgroundColor: PALETTE[i % PALETTE.length] }}></div>
+                                        </div>
                                     </div>
-                                    <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1 truncate relative z-10" title={dest}>{dest}</p>
-                                    <div className="flex items-end gap-2 relative z-10">
-                                        <p className="text-3xl font-black" style={{ color }}>{cnt}</p>
-                                        <p className="text-[10px] font-bold text-slate-400 mb-1.5">{lang === 'uz' ? 'poezd' : 'поездов'}</p>
+                                ))}
+                            </div>
+
+                            {/* Main Bar Chart */}
+                            <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-xl shadow-slate-200/50 p-8 min-h-[500px] flex flex-col">
+                                <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight mb-2">
+                                    <BarChart3 className="w-6 h-6 text-indigo-500" />
+                                    {lang === 'uz' ? 'Yo\'nalishlar bo\'yicha jami stiklar (Vaqtsiz)' : 'Итоговое распределение по направлениям'}
+                                </h3>
+                                <p className="text-sm font-bold text-slate-400 mb-8">{lang === 'uz' ? 'Ushbu grafik barcha tanlangan kunlardagi ma\'lumotlarni umumlashtirib bitta oson tahliliy ko\'rinishda beradi.' : 'Этот график агрегирует данные за весь выбранный период для наглядного сравнения станций назначения.'}</p>
+
+                                {currentViewData.length > 0 ? (
+                                    <div className="flex-1 w-full min-h-[400px]">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={currentViewData} margin={{ top: 30, right: 30, left: -20, bottom: 40 }} barCategoryGap="20%">
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 13, fontWeight: 800, fill: '#64748b' }} dy={15} />
+                                                <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 13, fontWeight: 800, fill: '#cbd5e1' }} />
+                                                <RechartsTooltip content={<CustomSharedTooltip />} cursor={{ fill: '#f8fafc', opacity: 0.8 }} wrapperStyle={{ zIndex: 1000 }} />
+                                                <Bar dataKey="count" name={lang === 'uz' ? 'Poezdlar' : 'Поезда'} radius={[12, 12, 0, 0]}>
+                                                    {currentViewData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={PALETTE[index % PALETTE.length]} />
+                                                    ))}
+                                                    <LabelList dataKey="count" content={(props: any) => {
+                                                        const { x, y, width, value } = props;
+                                                        if (!value) return null;
+                                                        return (
+                                                            <text x={x + width / 2} y={y - 14} fill="#000" opacity={0.6} textAnchor="middle" dominantBaseline="middle" fontSize="16" fontWeight="900">
+                                                                {value}
+                                                            </text>
+                                                        )
+                                                    }} />
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </div>
-                                </motion.div>
-                            );
-                        })}
-                    </div>
-                )}
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                                        <Info className="w-16 h-16 opacity-20 mb-4" />
+                                        <p className="font-bold text-xl">{lang === 'uz' ? 'Ma\'lumot topilmadi' : 'Нет данных'}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                        </motion.div>
+                    )}
+
+                    {/* ========================================================= */}
+                    {/* =================== DYNAMICS VIEW ======================= */}
+                    {/* ========================================================= */}
+                    {viewMode === 'dynamics' && (
+                        <motion.div key="dynamics" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="bg-white rounded-[2rem] border border-slate-200/60 shadow-xl shadow-slate-200/50 p-8 flex-1 min-h-[600px] flex flex-col">
+
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-4">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-3 tracking-tight mb-2">
+                                        <CalendarDays className="w-6 h-6 text-indigo-500" />
+                                        {lang === 'uz' ? 'Sana kesimida o\'sish va kamayish dinamikasi' : 'Частотная динамика по датам (Отчетный период)'}
+                                    </h3>
+                                    <p className="text-sm font-bold text-slate-400">
+                                        {lang === 'uz' ? 'Diqqat: Ushbu sanalar aynan "Отчет" tabidagi 18:00 dan 18:00 gacha hisoblangan logikaga asoslangan.' : 'Внимание: Эти даты строго синхронизированы с логикой отчетов (с 18:00 до 18:00 следующего дня).'}
+                                    </p>
+                                </div>
+                                <div className="flex items-center bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner">
+                                    <button onClick={() => setPeriod('day')} className={`px-5 py-2 rounded-lg text-sm font-black transition-all ${period === 'day' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>{lang === 'uz' ? 'Kunlik' : 'По Дням'}</button>
+                                    <button onClick={() => setPeriod('month')} className={`px-5 py-2 rounded-lg text-sm font-black transition-all ${period === 'month' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}>{lang === 'uz' ? 'Oylik' : 'По Месяцам'}</button>
+                                </div>
+                            </div>
+
+                            {dynamicsData.length > 0 && dynamicsUniqueDests.length > 0 ? (
+                                <div className="flex-1 w-full relative">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={dynamicsData} margin={{ top: 20, right: 30, left: -20, bottom: 40 }}>
+                                            <defs>
+                                                {dynamicsUniqueDests.map((dest, i) => (
+                                                    <linearGradient key={`colorUv-${i}`} id={`colorUv-${i}`} x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor={PALETTE[i % PALETTE.length]} stopOpacity={0.6} />
+                                                        <stop offset="95%" stopColor={PALETTE[i % PALETTE.length]} stopOpacity={0} />
+                                                    </linearGradient>
+                                                ))}
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 13, fontWeight: 800, fill: '#64748b' }} dy={15} />
+                                            <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 13, fontWeight: 800, fill: '#cbd5e1' }} />
+                                            <RechartsTooltip content={<CustomSharedTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 2, strokeDasharray: '5 5' }} wrapperStyle={{ zIndex: 1000 }} />
+                                            <Legend iconType="circle" iconSize={12} wrapperStyle={{ paddingTop: 40 }} formatter={v => <span style={{ fontSize: '14px', fontWeight: 800, color: '#334155' }}>{v}</span>} />
+
+                                            {dynamicsUniqueDests.map((dest, i) => (
+                                                <Area
+                                                    key={dest}
+                                                    type="monotone"
+                                                    dataKey={dest}
+                                                    name={dest}
+                                                    stroke={PALETTE[i % PALETTE.length]}
+                                                    strokeWidth={4}
+                                                    fillOpacity={1}
+                                                    fill={`url(#colorUv-${i})`}
+                                                    activeDot={{ r: 8, strokeWidth: 0, fill: PALETTE[i % PALETTE.length], stroke: '#fff' }}
+                                                />
+                                            ))}
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                                    <Activity className="w-16 h-16 opacity-20 mb-4" />
+                                    <p className="font-bold text-xl">{lang === 'uz' ? 'Taqqoslash uchun yetarli ma\'lumot yo\'q' : 'Недостаточно данных для сравнения'}</p>
+                                </div>
+                            )}
+
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
             </div>
         </div>
     );

@@ -242,7 +242,6 @@ export const getReportByDate = async (date: string, userContext?: AdminUser): Pr
 };
 
 export const getReportsInRange = async (startDate: string, endDate: string, userContext?: AdminUser): Promise<DailyReport[]> => {
-  const reports: DailyReport[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
 
@@ -251,11 +250,11 @@ export const getReportsInRange = async (startDate: string, endDate: string, user
     datesToFetch.push(d.toISOString().split('T')[0]);
   }
 
-  for (const date of datesToFetch) {
-    const report = await getReportByDate(date, userContext);
-    if (report) reports.push(report);
-  }
-  return reports;
+  // OPTIMIZATION: Fetch all dates in parallel instead of sequentially waiting for each one
+  const promises = datesToFetch.map(date => getReportByDate(date, userContext));
+  const results = await Promise.all(promises);
+
+  return results.filter((report): report is DailyReport => report !== undefined);
 };
 
 export const getReportDates = async (userContext?: AdminUser): Promise<string[]> => {
