@@ -67,7 +67,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, lang }) => {
             <div className="bg-gradient-to-br from-indigo-500/20 to-blue-500/20 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-white/10 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
               <TrainFront className="w-10 h-10 text-indigo-400" />
             </div>
-            <h1 className="text-3xl font-black text-white tracking-tight">UTY <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-400">Analytics</span></h1>
+            <h1 className="text-3xl font-black text-white tracking-tight">ЕДЦ <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-400">Аналитика</span></h1>
             <p className="text-slate-400 mt-2 font-medium text-sm">
               {getTranslation("login_subtitle", lang)}
             </p>

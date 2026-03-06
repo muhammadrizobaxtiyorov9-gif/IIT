@@ -25,7 +25,7 @@ const dictionary: Record<string, Record<Language, string>> = {
 
   // --- Sidebar / Yon menyu ---
   "nav_home": { ru: "Карта и Обзор", uz: "Xarita va Umumiy" },
-  "nav_dashboard": { ru: "Дашборд", uz: "Boshqaruv Paneli" },
+  "nav_dashboard": { ru: "Мониторинг", uz: "Monitoring" },
   "nav_input": { ru: "Загрузка данных", uz: "Ma'lumot Yuklash" },
   "nav_admin": { ru: "Настройки", uz: "Sozlamalar" },
   "nav_users": { ru: "Пользователи", uz: "Foydalanuvchilar" },

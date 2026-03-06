@@ -207,68 +207,107 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 3000): Promise<T> => {
 
 // --- API FUNCTIONS (HYBRID STRATEGY WITH TRANSACTION) ---
 
-export const getReportByDate = async (date: string, userContext?: AdminUser): Promise<DailyReport | null> => {
-  let finalData: any = null;
-  const cleanDate = date.trim();
+// Helper: builds the Firestore doc ID for a user-scoped report
+// Admins use just the date (for backwards compat), users use date__username
+const getDocId = (date: string, uploadedBy?: string): string => {
+  if (!uploadedBy) return date; // admin / backwards compat
+  return `${date}__${uploadedBy}`;
+};
 
-  // 1. Try Fetching from Backend
+const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
+  const sections = finalData.sections || [];
+  const unMinifiedWagons = (finalData.wagons || []).map((w: any) => ({
+    sequence: w.s ?? w.sequence ?? 0,
+    number: w.n ?? w.number ?? "",
+    operationCode: w.o ?? w.operationCode ?? "",
+    cargoWeight: w.w ?? w.cargoWeight ?? 0,
+    stationCode: w.st ?? w.stationCode ?? "",
+    cargoCode: w.c ?? w.cargoCode ?? "",
+    entryPointId: w.ep ?? w.entryPointId ?? null,
+    trainIndex: w.ti ?? w.trainIndex ?? "",
+    rawBlock: w.rb ?? (w.si !== undefined ? sections[w.si] : ""),
+    arrivalDate: w.ad || w.arrivalDate || undefined
+  }));
+  return {
+    date: finalData.date || cleanDate,
+    rawData: finalData.rawData || "",
+    wagons: unMinifiedWagons,
+    sections,
+    stations: [],
+    timestamp: finalData.timestamp || Date.now(),
+    uploadedBy: finalData.uploadedBy
+  };
+};
+
+export const getReportByDate = async (date: string, userContext?: AdminUser): Promise<DailyReport | null> => {
+  const cleanDate = date.trim();
+  const isUser = userContext?.role === 'user';
+
+  // --- Firestore fetch ---
   try {
     if (USE_LOCAL_BACKEND) {
+      // Local backend: fetch by date and filter client-side if needed
       const res = await fetch(`${API_URL}/reports/${cleanDate}`);
-      if (res.ok) finalData = await res.json();
+      if (res.ok) {
+        const finalData = await res.json();
+        if (isUser && finalData.uploadedBy !== userContext!.username) return null;
+        const report = unMinifyReport(cleanDate, finalData);
+        LS.saveReport(cleanDate, report);
+        return report;
+      }
     } else if (db) {
-      const docSnap = await withTimeout(getDoc(doc(db, "reports", cleanDate))) as DocumentSnapshot<DocumentData>;
-      if (docSnap.exists()) finalData = docSnap.data();
-    }
-  } catch (error) {
-    console.warn(`[Load Info] Backend load failed.`);
-  }
-
-  if (finalData) {
-    if (userContext && userContext.role === 'user') {
-      if (finalData.uploadedBy !== userContext.username) {
-        return null; // Hide from unauthorized standard users
+      if (isUser) {
+        // Fetch user-scoped doc directly: date__username
+        const docId = getDocId(cleanDate, userContext!.username);
+        const docSnap = await withTimeout(getDoc(doc(db, "reports", docId))) as DocumentSnapshot<DocumentData>;
+        if (docSnap.exists()) {
+          const report = unMinifyReport(cleanDate, docSnap.data());
+          LS.saveReport(cleanDate, report);
+          return report;
+        }
+        // Also try legacy date-only doc (migration compatibility)
+        const legacySnap = await withTimeout(getDoc(doc(db, "reports", cleanDate))) as DocumentSnapshot<DocumentData>;
+        if (legacySnap.exists()) {
+          const data = legacySnap.data();
+          if (data.uploadedBy === userContext!.username) {
+            const report = unMinifyReport(cleanDate, data);
+            LS.saveReport(cleanDate, report);
+            return report;
+          }
+        }
+      } else {
+        // Admin/superadmin: query all docs whose ID starts with cleanDate
+        // Use range query: date <= docId < date + "\uf8ff"
+        const coll = collection(db, "reports");
+        const q = query(coll,
+          orderBy("__name__"),
+          where("__name__", ">=", cleanDate),
+          where("__name__", "<=", cleanDate + "\uf8ff")
+        );
+        const snap = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
+        if (!snap.empty) {
+          // Merge all docs for that date into one combined report (admin view)
+          const combined: any = { date: cleanDate, wagons: [], rawData: "", sections: [], timestamp: 0, uploadedBy: undefined };
+          snap.docs.forEach(d => {
+            const data = d.data();
+            combined.wagons = [...combined.wagons, ...(data.wagons || [])];
+            combined.rawData += (data.rawData ? `\n--- [${data.uploadedBy}] ---\n${data.rawData}` : '');
+            combined.sections = [...combined.sections, ...(data.sections || [])];
+            if (data.timestamp > combined.timestamp) combined.timestamp = data.timestamp;
+          });
+          return unMinifyReport(cleanDate, combined);
+        }
       }
     }
-
-    const sections = finalData.sections || [];
-
-    // Robust Un-Minification
-    const unMinifiedWagons = (finalData.wagons || []).map((w: any) => ({
-      sequence: w.s ?? w.sequence ?? 0,
-      number: w.n ?? w.number ?? "",
-      operationCode: w.o ?? w.operationCode ?? "",
-      cargoWeight: w.w ?? w.cargoWeight ?? 0,
-      stationCode: w.st ?? w.stationCode ?? "",
-      cargoCode: w.c ?? w.cargoCode ?? "",
-      entryPointId: w.ep ?? w.entryPointId ?? null,
-      trainIndex: w.ti ?? w.trainIndex ?? "",
-      rawBlock: w.rb ?? (w.si !== undefined ? sections[w.si] : ""),
-      arrivalDate: w.ad || w.arrivalDate || undefined
-    }));
-
-    const report: DailyReport = {
-      date: finalData.date,
-      rawData: finalData.rawData || "",
-      wagons: unMinifiedWagons,
-      sections: sections,
-      stations: [],
-      timestamp: finalData.timestamp || Date.now(),
-      uploadedBy: finalData.uploadedBy
-    };
-    LS.saveReport(cleanDate, report); // Cache to local storage
-    return report;
+  } catch (error) {
+    console.warn(`[Load Info] Backend load failed for ${cleanDate}.`);
   }
 
-  // Local fetch fallback if backend failed or no data
+  // Local fallback
   try {
     const localReport = LS.getReport(cleanDate, userContext);
-    if (localReport) {
-      return localReport;
-    }
-  } catch (e) {
-    // Retry local
-  }
+    if (localReport) return localReport;
+  } catch (e) { }
 
   return null;
 };
@@ -295,6 +334,7 @@ export const getReportsInRange = async (startDate: string, endDate: string, user
 
 export const getReportDates = async (userContext?: AdminUser): Promise<string[]> => {
   const dates = new Set<string>();
+  const isUser = userContext?.role === 'user';
 
   // Get Backend Dates
   try {
@@ -303,7 +343,7 @@ export const getReportDates = async (userContext?: AdminUser): Promise<string[]>
       if (res.ok) {
         const list = await res.json();
         list.forEach((item: any) => {
-          if (!userContext || userContext.role !== 'user' || item.uploadedBy === userContext.username) {
+          if (!isUser || item.uploadedBy === userContext!.username) {
             dates.add(item.date);
           }
         });
@@ -914,7 +954,9 @@ export const saveDailyReport = async (
       finalReport = mergedPayload;
 
     } else if (db) {
-      const docRef = doc(db, "reports", cleanDate);
+      // Use composite doc ID for data isolation per user
+      const docId = getDocId(cleanDate, uploadedBy);
+      const docRef = doc(db, "reports", docId);
 
       try {
         await withTimeout(runTransaction(db, async (transaction) => {
