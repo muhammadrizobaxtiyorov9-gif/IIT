@@ -193,6 +193,12 @@ const LS = {
       }
       return null;
     } catch (e) { return null; }
+  },
+
+  deleteReport: (date: string) => {
+    try {
+      localStorage.removeItem(`report_${date}`);
+    } catch (e) { }
   }
 };
 
@@ -497,6 +503,8 @@ export const deleteTrainFromReport = async (date: string, trainIndex: string, de
     if (deletedBy) {
       logSystemAction('DATA_DELETE', deletedBy, `Deleted train ${targetIndex} from report for date ${cleanDate}`);
     }
+    // Invalidate local cache so stale data isn't served on next load
+    LS.deleteReport(cleanDate);
     notifyChange('reports');
     return { success: true };
   } catch (error: any) {
@@ -517,6 +525,8 @@ export const deleteReport = async (date: string, username?: string): Promise<{ s
     if (username) {
       logSystemAction('DATA_DELETE', username, `Deleted report for date ${cleanDate}`);
     }
+    // Invalidate local cache to keep LS in sync with backend
+    LS.deleteReport(cleanDate);
     notifyChange('reports');
     return { success: true };
   } catch (error: any) {

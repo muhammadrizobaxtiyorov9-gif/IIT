@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AdminUser, SystemLog } from '../types';
 import { getAdmins, addAdmin, deleteAdmin, updateAdmin, getSystemLogs } from '../utils/db';
-import { UserPlus, Trash2, Edit2, Shield, User, Activity, Search, X } from 'lucide-react';
+import { UserPlus, Trash2, Edit2, Shield, User, X } from 'lucide-react';
 
 interface AdminPanelProps {
   currentUser: AdminUser;
@@ -10,13 +10,8 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'logs'>('users');
   const [admins, setAdmins] = useState<AdminUser[]>([]);
-  const [logs, setLogs] = useState<SystemLog[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Log filtering
-  const [selectedLogDate, setSelectedLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Form State
   const [isAdding, setIsAdding] = useState(false);
@@ -27,17 +22,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
 
   useEffect(() => {
     loadData();
-  }, [activeTab]);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
-    if (activeTab === 'users') {
-      const data = await getAdmins();
-      setAdmins(data);
-    } else {
-      const data = await getSystemLogs();
-      setLogs(data);
-    }
+    const data = await getAdmins();
+    setAdmins(data);
     setLoading(false);
   };
 
@@ -88,31 +78,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-white/10 bg-slate-800/30">
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`px-6 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'users' ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-white'
-              }`}
-          >
-            <User className="w-4 h-4" />
-            Foydalanuvchilar
-          </button>
-          <button
-            onClick={() => setActiveTab('logs')}
-            className={`px-6 py-4 text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'logs' ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/5' : 'text-slate-400 hover:text-white'
-              }`}
-          >
-            <Activity className="w-4 h-4" />
-            Tizim Tarixi (Logs)
-          </button>
-        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6 bg-slate-900">
           {loading ? (
             <div className="flex items-center justify-center h-full text-slate-500">Yuklanmoqda...</div>
-          ) : activeTab === 'users' ? (
+          ) : (
             <div className="space-y-6">
               {currentUser.role === 'superadmin' && (
                 <div className="flex justify-end">
@@ -248,62 +219,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ currentUser, onClose, t 
                         )}
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center mb-4 bg-slate-800/30 p-4 rounded-xl border border-white/5">
-                <div>
-                  <h3 className="text-white font-medium">Tizim Tarixi (Logs)</h3>
-                  <p className="text-xs text-slate-400">Tizimdagi barcha amallar tarixi ({selectedLogDate})</p>
-                </div>
-                <div>
-                  <input
-                    type="date"
-                    value={selectedLogDate}
-                    onChange={(e) => setSelectedLogDate(e.target.value)}
-                    className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-800/30 rounded-xl border border-white/5 overflow-hidden">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-800/50 text-slate-400 uppercase text-xs">
-                    <tr>
-                      <th className="px-6 py-4 font-medium">Vaqt</th>
-                      <th className="px-6 py-4 font-medium">Foydalanuvchi</th>
-                      <th className="px-6 py-4 font-medium">Amal</th>
-                      <th className="px-6 py-4 font-medium">Tafsilotlar</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {logs
-                      .filter(log => new Date(log.timestamp).toISOString().split('T')[0] === selectedLogDate)
-                      .map((log) => (
-                        <tr key={log.id} className="hover:bg-white/5 transition-colors">
-                          <td className="px-6 py-4 text-slate-400 whitespace-nowrap">
-                            {new Date(log.timestamp).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-white font-medium">{log.username}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${log.action === 'LOGIN' ? 'bg-green-500/10 text-green-400' :
-                                log.action === 'DATA_UPLOAD' ? 'bg-blue-500/10 text-blue-400' :
-                                  log.action === 'DATA_DELETE' ? 'bg-red-500/10 text-red-400' :
-                                    'bg-slate-500/10 text-slate-400'
-                              }`}>
-                              {log.action}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-300">
-                            {log.details}
-                          </td>
-                        </tr>
-                      ))}
                   </tbody>
                 </table>
               </div>
