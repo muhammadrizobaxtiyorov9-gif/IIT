@@ -11,7 +11,9 @@ import HomePage from './components/HomePage';
 import AdminPage from './components/AdminPage';
 import { LoginPage } from './components/LoginPage';
 import { AdminPanel } from './components/AdminPanel';
-import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle } from 'lucide-react';
+import UserProfileModal from './components/UserProfileModal';
+import { GlobalClock } from './components/GlobalClock'; // <-- new import
+import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle, User as UserIcon, TrainFront } from 'lucide-react';
 // @ts-ignore
 import mammoth from 'mammoth';
 import { logger } from './utils/logger'; // Import Logger
@@ -208,28 +210,28 @@ const MiniCalendar: React.FC<MiniCalendarProps> = ({ dateRange, onSelectRange, a
       const status = getDateStatus(dateStr);
       const hasData = availableDates.has(dateStr);
 
-      let btnClass = "text-slate-400 hover:bg-slate-700 hover:text-white";
-      let bgClass = "rounded-full";
+      let btnClass = "text-slate-400 hover:bg-slate-800 hover:text-white hover:ring-1 hover:ring-indigo-500/30";
+      let bgClass = "rounded-lg"; // Using softer rounded-lg instead of pills
 
       // Styling based on range status
       if (status === 'single') {
-        bgClass = "bg-blue-600 rounded-full shadow-lg shadow-blue-500/30";
-        btnClass = "text-white font-bold";
+        bgClass = "bg-gradient-to-br from-indigo-500 to-blue-600 rounded-lg shadow-lg shadow-indigo-500/40 ring-1 ring-white/20";
+        btnClass = "text-white font-bold scale-105";
       } else if (status === 'start') {
-        bgClass = "bg-blue-600 rounded-l-full rounded-r-none shadow-lg shadow-blue-500/30";
+        bgClass = "bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-l-lg shadow-lg shadow-indigo-500/40";
         if (selectionMode === 'custom' && customStart === dateStr) {
           bgClass += " animate-pulse ring-2 ring-white/50"; // Pulse if waiting for second click
         }
         btnClass = "text-white font-bold";
       } else if (status === 'end') {
-        bgClass = "bg-blue-600 rounded-r-full rounded-l-none shadow-lg shadow-blue-500/30";
+        bgClass = "bg-gradient-to-l from-blue-500 to-blue-600 rounded-r-lg shadow-lg shadow-blue-500/40";
         btnClass = "text-white font-bold";
       } else if (status === 'middle') {
-        bgClass = "bg-blue-900/40 rounded-none border-y border-blue-900/50";
-        btnClass = "text-blue-200";
+        bgClass = "bg-indigo-900/40 border-y border-indigo-500/30 rounded-none";
+        btnClass = "text-indigo-200";
       } else if (hasData) {
         // Not selected, but has data
-        btnClass = "text-slate-200 font-medium";
+        btnClass = "text-slate-200 font-medium bg-slate-800/50";
       }
 
       days.push(
@@ -325,18 +327,53 @@ const App: React.FC = () => {
   const [wagons, setWagons] = useState<Wagon[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка...');
-  // Remove manual toast
-  // const [successToast, setSuccessToast] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin'>('home');
+
+  // Load last active tab from F5 persistence
+  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin'>(() => {
+    try {
+      const saved = localStorage.getItem('activeTab') as any;
+      if (saved && ['home', 'dashboard', 'input', 'admin'].includes(saved)) {
+        return saved;
+      }
+    } catch (e) { }
+    return 'home';
+  });
+
+  // Track changes to activeTab and save
+  useEffect(() => {
+    try {
+      localStorage.setItem('activeTab', activeTab);
+    } catch (e) { }
+  }, [activeTab]);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); // For Mobile
   const [isCollapsed, setIsCollapsed] = useState(false); // For Desktop (Mini Sidebar)
   const [isDragging, setIsDragging] = useState(false); // For Drag & Drop
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Date State for Archive (Range)
-  const todayStr = new Date().toISOString().split('T')[0];
-  const [dateRange, setDateRange] = useState<DateRange>({ startDate: todayStr, endDate: todayStr, type: 'day' });
-  const [availableDates, setAvailableDates] = useState<Set<string>>(new Set());
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    try {
+      const cached = localStorage.getItem('dateRange_cache');
+      if (cached) return JSON.parse(cached);
+    } catch { }
+    const todayStr = new Date().toISOString().split('T')[0];
+    return { startDate: todayStr, endDate: todayStr, type: 'day' };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dateRange_cache', JSON.stringify(dateRange));
+    } catch { }
+  }, [dateRange]);
+  const [availableDates, setAvailableDates] = useState<Set<string>>(() => {
+    try {
+      const cached = localStorage.getItem('availableDates_cache');
+      return cached ? new Set(JSON.parse(cached)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [isDataFromDb, setIsDataFromDb] = useState(false);
 
   const [customOpData, setCustomOpData] = useState<string>(RAW_OPERATIONAL_DATA);
@@ -357,6 +394,7 @@ const App: React.FC = () => {
     }
   });
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // --- GLOBAL ERROR HANDLING ---
   useEffect(() => {
@@ -414,8 +452,15 @@ const App: React.FC = () => {
           }
         });
 
-        setLoadingStatus(t('sync_archive'));
-        await refreshAvailableDates();
+        // If we have no cached dates, show the status briefly
+        if (availableDates.size === 0) {
+          setLoadingStatus(t('sync_archive'));
+        }
+
+        // Fire metadata sync in background (non-blocking)
+        refreshAvailableDates();
+
+        // Only block the UI loader on fetching the actual report payload for the current view
         await loadDataForRange(dateRange);
       } catch (e) {
         logger.error('App Initialization Failed', e);
@@ -453,14 +498,29 @@ const App: React.FC = () => {
     setCurrentUser(null);
     try {
       localStorage.removeItem('currentUser');
+      localStorage.removeItem('activeTab');
     } catch (e) { }
     setWagons([]);
     setIsDataFromDb(false);
+    // Reset date range to today when logging out
+    const todayStr = new Date().toISOString().split('T')[0];
+    setDateRange({ startDate: todayStr, endDate: todayStr, type: 'day' });
+  };
+
+  const handleProfileUpdateSuccess = (updatedUser: AdminUser) => {
+    setCurrentUser(updatedUser);
+    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    setIsProfileModalOpen(false);
   };
 
   const refreshAvailableDates = async () => {
-    const dates = await getReportDates(currentUser || undefined);
-    setAvailableDates(new Set(dates));
+    try {
+      const dates = await getReportDates(currentUser || undefined);
+      setAvailableDates(new Set(dates));
+      localStorage.setItem('availableDates_cache', JSON.stringify(dates));
+    } catch (e) {
+      console.warn("Background date sync failed");
+    }
   };
 
   const loadDataForRange = async (range: DateRange) => {
@@ -627,10 +687,20 @@ const App: React.FC = () => {
           allValidationErrors.push(...chunkErrors);
         }
 
+        const uniqueTrains = Array.from(new Set(parsedWagons.map(w => w.trainIndex?.trim()).filter(Boolean)));
+
         if (shouldSave) {
           setLoadingStatus(`${t('saving')} ${dateStr}...`);
 
-          const result = await saveDailyReport(dateStr, chunkRawData, parsedWagons, staticStations, currentUser || undefined);
+          const result = await saveDailyReport(
+            dateStr,
+            parsedWagons,
+            chunkRawData,
+            [], // sections
+            staticStations,
+            currentUser?.username || 'unknown',
+            uniqueTrains
+          );
 
           if (result.success) {
             savedDates.push(dateStr);
@@ -910,11 +980,12 @@ const App: React.FC = () => {
   );
 
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} />;
+    return <LoginPage onLogin={handleLogin} lang={lang} />;
   }
 
   return (
-    <div className="flex h-screen w-screen bg-[#F8FAFC] font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-900 overflow-hidden">
+    <div className="flex h-screen bg-[#070A14] selection:bg-indigo-500/30 font-sans relative overflow-hidden">
+      {/* File Processing Modal */}
       <Toaster richColors position="bottom-right" />
 
       {/* Admin Panel Modal */}
@@ -982,36 +1053,26 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Global Animated Background Orbs for Premium Tech Feel */}
+      <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px] pointer-events-none animate-pulse z-0"></div>
+      <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none animate-pulse z-0" style={{ animationDelay: '2s' }}></div>
+
       {/* Mobile Menu Button */}
-      <div className="lg:hidden fixed top-4 left-4 z-50 print:hidden">
+      <div className="lg:hidden fixed top-4 left-4 z-50 print:hidden relative">
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-3 bg-slate-900/95 backdrop-blur-xl text-white rounded-2xl shadow-xl border border-white/10 active:scale-95 transition-all">
           <Menu className="w-5 h-5" />
         </button>
       </div>
 
       {/* Sidebar */}
-      <aside className={`flex-none h-full bg-[#0B1121] text-white flex flex-col transition-all duration-500 ease-cubic-bezier(0.4, 0, 0.2, 1) shadow-2xl z-40 border-r border-slate-800 fixed inset-y-0 left-0 lg:static ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isCollapsed ? 'lg:w-20' : 'lg:w-72 w-72'}`}>
+      <aside className={`flex-none h-full bg-[#0B1121]/90 backdrop-blur-2xl text-white flex flex-col transition-all duration-500 ease-cubic-bezier(0.4, 0, 0.2, 1) shadow-[4px_0_24px_rgba(0,0,0,0.5)] z-40 border-r border-white/5 fixed inset-y-0 left-0 lg:static ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${isCollapsed ? 'lg:w-20' : 'lg:w-72 w-72'}`}>
 
         {/* Sidebar Header */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center px-0' : 'justify-between px-6'} h-24 border-b border-slate-800/50 bg-gradient-to-b from-slate-900 to-[#0B1121] flex-none`}>
           {!isCollapsed && (
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center flex-none p-1 shadow-lg shadow-blue-900/20 ring-1 ring-white/5 overflow-hidden bg-white">
-                <img
-                  src="/logo.png"
-                  className="w-full h-full object-contain"
-                  alt="Logo"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    const parent = e.currentTarget.parentElement;
-                    if (parent) {
-                      const fallback = document.createElement('div');
-                      fallback.className = 'w-full h-full flex items-center justify-center';
-                      fallback.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600 w-5 h-5"><rect width="16" height="16" x="4" y="4" rx="2"/><path d="M4 10h16"/><path d="M12 4v16"/><line x1="8" x2="8" y1="2" y2="4"/><line x1="16" x2="16" y1="2" y2="4"/></svg>`;
-                      parent.appendChild(fallback);
-                    }
-                  }}
-                />
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center flex-none p-2 shadow-[0_0_15px_rgba(99,102,241,0.4)] border border-white/20">
+                <TrainFront className="w-full h-full text-white" />
               </div>
               <div className="min-w-0">
                 <h2 className="text-xl font-black tracking-tight text-white leading-none whitespace-nowrap">{t('app_title')}</h2>
@@ -1101,13 +1162,23 @@ const App: React.FC = () => {
           )}
 
           <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className={`relative group flex items-center w-full mb-1.5 rounded-xl transition-all duration-300 ease-out ${isCollapsed ? 'justify-center px-0 py-3' : 'px-4 py-3'
+              } text-slate-400 hover:bg-slate-800/50 hover:text-white mt-1`}
+            title={isCollapsed ? t('profile_settings') : ''}
+          >
+            <UserIcon className={`w-5 h-5 transition-transform duration-300 ${isCollapsed ? '' : 'mr-3'} group-hover:scale-110`} />
+            {!isCollapsed && <span className="text-sm font-semibold tracking-wide flex-1 text-left">{t('profile_settings')}</span>}
+          </button>
+
+          <button
             onClick={handleLogout}
             className={`relative group flex items-center w-full mb-1.5 rounded-xl transition-all duration-300 ease-out ${isCollapsed ? 'justify-center px-0 py-3' : 'px-4 py-3'
               } text-red-400 hover:bg-red-500/10 hover:text-red-300 mt-4`}
-            title={isCollapsed ? "Chiqish" : ''}
+            title={isCollapsed ? t('logout') : ''}
           >
             <LogOut className={`w-5 h-5 transition-transform duration-300 ${isCollapsed ? '' : 'mr-3'} group-hover:scale-110`} />
-            {!isCollapsed && <span className="text-sm font-semibold tracking-wide flex-1 text-left">Chiqish</span>}
+            {!isCollapsed && <span className="text-sm font-semibold tracking-wide flex-1 text-left">{t('logout')}</span>}
           </button>
         </nav>
 
@@ -1135,137 +1206,148 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative flex flex-col h-full overflow-hidden bg-[#F8FAFC] w-full min-w-0">
+      <main className="flex-1 relative flex flex-col h-full overflow-hidden bg-transparent w-full min-w-0 z-10">
 
-        {/* Loading Overlay */}
+        {/* Removed GlobalClock per user request. Top header now acts purely as spacing or future breadcrumbs/search */}
+        <div className="h-16 border-b border-white/5 bg-[#0B1121]/80 backdrop-blur-2xl flex items-center justify-between px-6 shrink-0 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.3)]">
+          <div className="flex-1"></div>
+        </div>
+
+        {/* Sleek Top-Bar Loading Overlay (Replaces intrusive full-screen blocking modal) */}
         {loading && (
-          <div className="absolute inset-0 bg-white/90 backdrop-blur-xl z-[100] flex flex-col items-center justify-center animate-in fade-in duration-300">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-2.5 h-2.5 bg-blue-600 rounded-full shadow-[0_0_15px_rgba(37,99,235,0.6)]"></div>
-              </div>
+          <div className="absolute top-16 left-0 right-0 h-1 bg-slate-100 z-[100] overflow-hidden">
+            <div className="h-full bg-blue-600 animate-[loading-bar_1.5s_ease-in-out_infinite] origin-left"></div>
+            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg border border-slate-700 whitespace-nowrap animate-in slide-in-from-top-2 fade-in">
+              {loadingStatus}
             </div>
-            <p className="mt-6 text-slate-900 font-bold text-sm tracking-wide animate-pulse">{loadingStatus}</p>
           </div>
         )}
 
         {/* Tab Content */}
-        {!loading && (
-          <>
-            {(activeTab === 'home' || activeTab === 'admin') && (
-              <div className="flex-1 overflow-hidden relative h-full w-full">
-                {activeTab === 'home' && <HomePage wagons={wagons} mapPoints={mapPoints} mtuRegions={mtuRegions} lang={lang} t={t} />}
-                {activeTab === 'admin' && <AdminPage mapPoints={mapPoints} setMapPoints={setMapPoints} mtuRegions={mtuRegions} setMtuRegions={setMtuRegions} lang={lang} t={t} />}
-              </div>
-            )}
+        <>
+          {(activeTab === 'home' || activeTab === 'admin') && (
+            <div className="flex-1 overflow-hidden relative h-full w-full">
+              {activeTab === 'home' && <HomePage wagons={wagons} mapPoints={mapPoints} mtuRegions={mtuRegions} lang={lang} t={t} />}
+              {activeTab === 'admin' && <AdminPage mapPoints={mapPoints} setMapPoints={setMapPoints} mtuRegions={mtuRegions} setMtuRegions={setMtuRegions} lang={lang} t={t} />}
+            </div>
+          )}
 
-            {(activeTab === 'dashboard' || activeTab === 'input') && (
-              <div className="flex-1 overflow-auto bg-[#F8FAFC] scroll-smooth relative h-full w-full">
-                {activeTab === 'dashboard' && (
-                  <div className="p-4 md:p-8 lg:p-10 max-w-[1920px] mx-auto min-h-full">
-                    <Dashboard
-                      stations={stations}
-                      wagons={wagons}
-                      trainCount={trainCount}
-                      lang={lang}
-                      t={t}
-                      selectedDate={dateRange.endDate}
-                      dateRange={dateRange}
-                      onDateRangeChange={handleRangeSelect}
-                      onDeleteTrain={handleDeleteTrain}
-                    />
-                  </div>
-                )}
-                {activeTab === 'input' && (
-                  <div className="p-6 lg:p-12 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 min-h-full flex flex-col justify-center">
-                    <div className="bg-white rounded-[2rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.08)] border border-slate-100 overflow-hidden w-full relative">
-                      {/* Decorative top bar */}
-                      <div className="h-2 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+          {(activeTab === 'dashboard' || activeTab === 'input') && (
+            <div className="flex-1 overflow-auto bg-[#F8FAFC] scroll-smooth relative h-full w-full">
+              {activeTab === 'dashboard' && (
+                <div className="p-4 md:p-8 lg:p-10 max-w-[1920px] mx-auto min-h-full">
+                  <Dashboard
+                    stations={stations}
+                    wagons={wagons}
+                    trainCount={trainCount}
+                    lang={lang}
+                    t={t}
+                    selectedDate={dateRange.endDate}
+                    dateRange={dateRange}
+                    onDateRangeChange={handleRangeSelect}
+                    onDeleteTrain={handleDeleteTrain}
+                  />
+                </div>
+              )}
+              {activeTab === 'input' && (
+                <div className="p-6 lg:p-12 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 min-h-full flex flex-col justify-center">
+                  <div className="bg-white rounded-[2rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.08)] border border-slate-100 overflow-hidden w-full relative">
+                    {/* Decorative top bar */}
+                    <div className="h-2 w-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
 
-                      <div className="p-10 border-b border-slate-100 bg-slate-50/30 flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center gap-4 mb-3">
-                            <div className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                              <Sparkles className="w-6 h-6 text-indigo-600" />
-                            </div>
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{t('upload_title')}</h2>
+                    <div className="p-10 border-b border-slate-100 bg-slate-50/30 flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-4 mb-3">
+                          <div className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                            <Sparkles className="w-6 h-6 text-indigo-600" />
                           </div>
-                          <p className="text-slate-500 text-base max-w-2xl leading-relaxed font-medium">
-                            {t('selected_date')}: <span className="text-slate-900 font-bold bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm mx-1">{dateRange.endDate}</span>
-                          </p>
+                          <h2 className="text-3xl font-black text-slate-900 tracking-tight">{t('upload_title')}</h2>
                         </div>
-                        <div className="hidden lg:flex bg-blue-50/80 px-4 py-2.5 rounded-xl border border-blue-100 text-blue-700 text-xs font-bold items-center shadow-sm backdrop-blur-sm">
-                          <Database className="w-4 h-4 mr-2" /> {t('db_connected')}
+                        <p className="text-slate-500 text-base max-w-2xl leading-relaxed font-medium">
+                          {t('selected_date')}: <span className="text-slate-900 font-bold bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm mx-1">{dateRange.endDate}</span>
+                        </p>
+                      </div>
+                      <div className="hidden lg:flex bg-blue-50/80 px-4 py-2.5 rounded-xl border border-blue-100 text-blue-700 text-xs font-bold items-center shadow-sm backdrop-blur-sm">
+                        <Database className="w-4 h-4 mr-2" /> {t('db_connected')}
+                      </div>
+                    </div>
+
+                    <div className="p-10 space-y-12">
+                      {/* Drag and Drop Area */}
+                      <div
+                        className={`group relative border-2 border-dashed rounded-2xl p-6 transition-all duration-300 cursor-pointer flex flex-col md:flex-row items-center justify-between gap-4 ${isDragging ? 'border-blue-500 bg-blue-50/30 scale-[1.01] shadow-xl shadow-blue-500/10' : 'border-slate-200 bg-slate-50/20 hover:border-blue-500 hover:bg-blue-50/10'}`}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
+                        <div className="flex items-center gap-4 text-left w-full">
+                          <div className={`w-14 h-14 bg-white rounded-xl shadow-sm border border-slate-100 flex-shrink-0 flex items-center justify-center transition-all duration-300 ${isDragging ? 'shadow-blue-500/20' : 'group-hover:shadow-blue-500/20'}`}>
+                            <FileUp className={`w-6 h-6 transition-colors ${isDragging ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-slate-800 tracking-tight">{isDragging ? (lang === 'uz' ? 'Fayllarni shu yerga tashlang' : 'Отпустите файлы здесь') : t('drag_files')}</h3>
+                            <p className="text-xs text-slate-400 font-medium">{t('support_files')}</p>
+                          </div>
                         </div>
+                        <button className={`px-6 py-2.5 flex-shrink-0 bg-white border rounded-xl text-sm font-bold shadow-sm transition-all ${isDragging ? 'border-blue-200 text-blue-600' : 'border-slate-200 text-slate-700 group-hover:border-blue-200 group-hover:text-blue-600'}`}>
+                          {t('choose_files')}
+                        </button>
+                        <input type="file" multiple ref={fileInputRef} className="hidden" accept=".txt,.log,.csv,.docx,.doc" onChange={handleFileUpload} />
                       </div>
 
-                      <div className="p-10 space-y-12">
-                        {/* Drag and Drop Area */}
-                        <div
-                          className={`group relative border-2 border-dashed rounded-2xl p-6 transition-all duration-300 cursor-pointer flex flex-col md:flex-row items-center justify-between gap-4 ${isDragging ? 'border-blue-500 bg-blue-50/30 scale-[1.01] shadow-xl shadow-blue-500/10' : 'border-slate-200 bg-slate-50/20 hover:border-blue-500 hover:bg-blue-50/10'}`}
-                          onClick={() => fileInputRef.current?.click()}
-                          onDragOver={handleDragOver}
-                          onDragLeave={handleDragLeave}
-                          onDrop={handleDrop}
-                        >
-                          <div className="flex items-center gap-4 text-left w-full">
-                            <div className={`w-14 h-14 bg-white rounded-xl shadow-sm border border-slate-100 flex-shrink-0 flex items-center justify-center transition-all duration-300 ${isDragging ? 'shadow-blue-500/20' : 'group-hover:shadow-blue-500/20'}`}>
-                              <FileUp className={`w-6 h-6 transition-colors ${isDragging ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'}`} />
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-bold text-slate-800 tracking-tight">{isDragging ? (lang === 'uz' ? 'Fayllarni shu yerga tashlang' : 'Отпустите файлы здесь') : t('drag_files')}</h3>
-                              <p className="text-xs text-slate-400 font-medium">{t('support_files')}</p>
-                            </div>
-                          </div>
-                          <button className={`px-6 py-2.5 flex-shrink-0 bg-white border rounded-xl text-sm font-bold shadow-sm transition-all ${isDragging ? 'border-blue-200 text-blue-600' : 'border-slate-200 text-slate-700 group-hover:border-blue-200 group-hover:text-blue-600'}`}>
-                            {t('choose_files')}
+                      {/* Manual Input */}
+                      <div className="relative">
+                        <div className="flex justify-between items-end mb-4">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">{t('manual_input')}</label>
+                        </div>
+                        <textarea
+                          className="w-full h-[500px] p-6 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm text-slate-700 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all resize-none shadow-inner leading-relaxed"
+                          value={customOpData}
+                          onChange={(e) => setCustomOpData(e.target.value)}
+                          placeholder={t('paste_here')}
+                        />
+                      </div>
+
+                      {/* Action Bar */}
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-100">
+                          <button onClick={() => setCustomOpData(RAW_OPERATIONAL_DATA)} className="px-6 py-3 text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl text-sm font-bold transition-all shadow-sm">
+                            {t('reset')}
                           </button>
-                          <input type="file" multiple ref={fileInputRef} className="hidden" accept=".txt,.log,.csv,.docx,.doc" onChange={handleFileUpload} />
+                          <button onClick={handleDataUpdate} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-xl shadow-slate-900/20 hover:shadow-slate-900/30 hover:-translate-y-0.5 active:translate-y-0">
+                            <Save className="w-4 h-4" /> {t('process_save')} <ArrowRight className="w-4 h-4 opacity-50" />
+                          </button>
                         </div>
 
-                        {/* Manual Input */}
-                        <div className="relative">
-                          <div className="flex justify-between items-end mb-4">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">{t('manual_input')}</label>
-                          </div>
-                          <textarea
-                            className="w-full h-[500px] p-6 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-sm text-slate-700 focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all resize-none shadow-inner leading-relaxed"
-                            value={customOpData}
-                            onChange={(e) => setCustomOpData(e.target.value)}
-                            placeholder={t('paste_here')}
-                          />
-                        </div>
-
-                        {/* Action Bar */}
-                        <div className="flex flex-col gap-4">
-                          <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-100">
-                            <button onClick={() => setCustomOpData(RAW_OPERATIONAL_DATA)} className="px-6 py-3 text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl text-sm font-bold transition-all shadow-sm">
-                              {t('reset')}
-                            </button>
-                            <button onClick={handleDataUpdate} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-xl shadow-slate-900/20 hover:shadow-slate-900/30 hover:-translate-y-0.5 active:translate-y-0">
-                              <Save className="w-4 h-4" /> {t('process_save')} <ArrowRight className="w-4 h-4 opacity-50" />
-                            </button>
-                          </div>
-
-                          <div className="flex items-center justify-center pt-2">
-                            <button
-                              onClick={handleViewRawData}
-                              className="px-8 py-3 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-emerald-100 shadow-sm w-full justify-center"
-                            >
-                              <Eye className="w-4 h-4" /> {lang === 'uz' ? "Ma'lumotlarni ko'rish" : "Просмотр данных"}
-                            </button>
-                          </div>
+                        <div className="flex items-center justify-center pt-2">
+                          <button
+                            onClick={handleViewRawData}
+                            className="px-8 py-3 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border border-emerald-100 shadow-sm w-full justify-center"
+                          >
+                            <Eye className="w-4 h-4" /> {lang === 'uz' ? "Ma'lumotlarni ko'rish" : "Просмотр данных"}
+                          </button>
                         </div>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       </main>
+
+      {/* Modals */}
+      {currentUser && (
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          currentUser={currentUser}
+          onSuccess={handleProfileUpdateSuccess}
+          lang={lang}
+        />
+      )}
     </div>
   );
 };

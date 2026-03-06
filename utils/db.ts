@@ -1,7 +1,7 @@
 
 import { initializeApp } from 'firebase/app';
 import {
-  getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, orderBy,
+  getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, orderBy, where,
   enableIndexedDbPersistence, runTransaction, setLogLevel,
   DocumentSnapshot, QuerySnapshot, DocumentData
 } from 'firebase/firestore';
@@ -173,6 +173,26 @@ const LS = {
       const admins = LS.getAdmins().filter((a: any) => a.username !== username);
       localStorage.setItem(LS.ADMINS, safeStringify(admins));
     } catch (e) { }
+  },
+
+  saveReport: (date: string, data: DailyReport) => {
+    try {
+      localStorage.setItem(`report_${date}`, safeStringify(data));
+    } catch (e) { }
+  },
+
+  getReport: (date: string, userContext?: AdminUser): DailyReport | null => {
+    try {
+      const raw = localStorage.getItem(`report_${date}`);
+      if (raw) {
+        const data = JSON.parse(raw) as DailyReport;
+        if (userContext && userContext.role === 'user') {
+          return (data.uploadedBy === userContext.username) ? data : null;
+        }
+        return data;
+      }
+      return null;
+    } catch (e) { return null; }
   }
 };
 
@@ -187,9 +207,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 3000): Promise<T> => {
 
 // --- API FUNCTIONS (HYBRID STRATEGY WITH TRANSACTION) ---
 
-
-
-export const getReportByDate = async (date: string, userContext?: AdminUser): Promise<DailyReport | undefined> => {
+export const getReportByDate = async (date: string, userContext?: AdminUser): Promise<DailyReport | null> => {
   let finalData: any = null;
   const cleanDate = date.trim();
 
@@ -209,7 +227,7 @@ export const getReportByDate = async (date: string, userContext?: AdminUser): Pr
   if (finalData) {
     if (userContext && userContext.role === 'user') {
       if (finalData.uploadedBy !== userContext.username) {
-        return undefined; // Hide from unauthorized standard users
+        return null; // Hide from unauthorized standard users
       }
     }
 
@@ -229,32 +247,50 @@ export const getReportByDate = async (date: string, userContext?: AdminUser): Pr
       arrivalDate: w.ad || w.arrivalDate || undefined
     }));
 
-    return {
+    const report: DailyReport = {
       date: finalData.date,
       rawData: finalData.rawData || "",
       wagons: unMinifiedWagons,
       sections: sections,
       stations: [],
-      timestamp: finalData.timestamp || Date.now()
-    } as DailyReport;
+      timestamp: finalData.timestamp || Date.now(),
+      uploadedBy: finalData.uploadedBy
+    };
+    LS.saveReport(cleanDate, report); // Cache to local storage
+    return report;
   }
-  return undefined;
+
+  // Local fetch fallback if backend failed or no data
+  try {
+    const localReport = LS.getReport(cleanDate, userContext);
+    if (localReport) {
+      return localReport;
+    }
+  } catch (e) {
+    // Retry local
+  }
+
+  return null;
 };
 
 export const getReportsInRange = async (startDate: string, endDate: string, userContext?: AdminUser): Promise<DailyReport[]> => {
+  const reports: DailyReport[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
 
+  // Fast parallel fetching for the entire date range
   const datesToFetch: string[] = [];
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     datesToFetch.push(d.toISOString().split('T')[0]);
   }
 
-  // OPTIMIZATION: Fetch all dates in parallel instead of sequentially waiting for each one
-  const promises = datesToFetch.map(date => getReportByDate(date, userContext));
-  const results = await Promise.all(promises);
+  const fetchedReports = await Promise.all(datesToFetch.map(dateStr => getReportByDate(dateStr, userContext)));
 
-  return results.filter((report): report is DailyReport => report !== undefined);
+  fetchedReports.forEach(report => {
+    if (report) reports.push(report);
+  });
+
+  return reports;
 };
 
 export const getReportDates = async (userContext?: AdminUser): Promise<string[]> => {
@@ -266,12 +302,16 @@ export const getReportDates = async (userContext?: AdminUser): Promise<string[]>
       const res = await fetch(`${API_URL}/reports`);
       if (res.ok) {
         const list = await res.json();
-        list.forEach((item: any) => dates.add(item.date));
+        list.forEach((item: any) => {
+          if (!userContext || userContext.role !== 'user' || item.uploadedBy === userContext.username) {
+            dates.add(item.date);
+          }
+        });
       }
     } else if (db) {
       let q = collection(db, "reports") as any;
       if (userContext && userContext.role === 'user') {
-        q = query(q, window.location.host.includes('localhost') ? null as any : require('firebase/firestore').where("uploadedBy", "==", userContext.username)); // Fallback placeholder if imported properly above. We'll use correct imports.
+        q = query(q, where("uploadedBy", "==", userContext.username));
       }
       const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
       snapshot.docs.forEach(doc => {
@@ -281,8 +321,34 @@ export const getReportDates = async (userContext?: AdminUser): Promise<string[]>
         }
       });
     }
+
+    // Harden backend endpoint fetching client-side too:
+    // If backend didn't filter, we filter manually here.
   } catch (error) {
     console.warn("Backend date fetch failed.");
+  }
+
+  // Double check manual enforcement if fallback or proxy
+  if (userContext && userContext.role === 'user') {
+    const verifiedDates = new Set<string>();
+    // Since getReportDates just gets dates from backend, we might be leaking if the backend endpoint '/reports'
+    // doesn't filter by user. To be absolutely safe without changing the backend right now,
+    // the UI will only see dates, but when parsing occurs, `getReportByDate` will block unauthorized payloads.
+    // However, to stop them from even seeing the date dots in the calendar:
+    for (const d of Array.from(dates)) {
+      const report = LS.getReport(d, userContext); // Check local storage for user-specific data
+      if (report) {
+        verifiedDates.add(d);
+      } else {
+        // If not in local storage, try fetching from backend to verify
+        const backendReport = await getReportByDate(d, userContext);
+        if (backendReport) {
+          verifiedDates.add(d);
+        }
+      }
+    }
+    dates.clear();
+    verifiedDates.forEach(d => dates.add(d));
   }
 
   return Array.from(dates).sort().reverse();
@@ -313,7 +379,10 @@ export const getAllReports = async (userContext?: AdminUser): Promise<DailyRepor
       }
     } else if (db) {
       const coll = collection(db, "reports");
-      const q = query(coll, orderBy("date", "desc"));
+      let q = query(coll, orderBy("date", "desc"));
+      if (userContext && userContext.role === 'user') {
+        q = query(coll, where("uploadedBy", "==", userContext.username), orderBy("date", "desc"));
+      }
       const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
       snapshot.docs.forEach(doc => {
         const data = doc.data();
@@ -357,7 +426,7 @@ export const subscribeToReports = (onUpdate: (reports: DailyReport[]) => void, u
   return () => { unsubscribeLocal(); unsubscribeRemote(); };
 };
 
-export const deleteTrainFromReport = async (date: string, trainIndex: string): Promise<{ success: boolean, message?: string }> => {
+export const deleteTrainFromReport = async (date: string, trainIndex: string, deletedBy?: string): Promise<{ success: boolean, message?: string }> => {
   const cleanDate = date.trim();
   const normalize = (s: string) => (s || "").trim();
   const targetIndex = normalize(trainIndex);
@@ -384,6 +453,9 @@ export const deleteTrainFromReport = async (date: string, trainIndex: string): P
           transaction.update(docRef, { wagons: updatedWagons });
         }
       }), 10000);
+    }
+    if (deletedBy) {
+      logSystemAction('DATA_DELETE', deletedBy, `Deleted train ${targetIndex} from report for date ${cleanDate}`);
     }
     notifyChange('reports');
     return { success: true };
@@ -604,9 +676,6 @@ export const updateAdmin = async (username: string, updates: Partial<AdminUser>,
   const idx = admins.findIndex((a: any) => a.username === username);
   if (idx >= 0) {
     admins[idx] = { ...admins[idx], ...updates };
-    LS.saveSettings(admins); // Note: LS.saveSettings is for map config, need to fix LS helper if used for admins
-    // Actually LS.saveAdmin handles add/update if we pass full object.
-    // Let's just re-save
     localStorage.setItem(LS.ADMINS, safeStringify(admins));
   }
   notifyChange('admins');
@@ -620,7 +689,63 @@ export const updateAdmin = async (username: string, updates: Partial<AdminUser>,
   }
   return true;
 };
-export const logSystemAction = async (action: 'LOGIN' | 'DATA_UPLOAD' | 'DATA_DELETE' | 'ADMIN_ADD' | 'ADMIN_DELETE' | 'ADMIN_UPDATE', username: string, details: string) => {
+
+export const changeUserCredentials = async (username: string, oldPass: string, newPass?: string, newName?: string, newUsername?: string): Promise<{ success: boolean; message: string; newUserObj?: AdminUser }> => {
+  try {
+    const admins = await getAdmins();
+    const targetUser = admins.find(a => a.username === username);
+
+    if (!targetUser) {
+      return { success: false, message: "Foydalanuvchi topilmadi" };
+    }
+
+    // Verify old password
+    const verifiedUser = await verifyAdmin(username, oldPass, 'system_update_check');
+    if (!verifiedUser) {
+      return { success: false, message: "Eski parol noto'g'ri" };
+    }
+
+    const updates: Partial<AdminUser> = {};
+    if (newPass && newPass.trim() !== "") updates.password = newPass;
+    if (newName && newName.trim() !== "") updates.name = newName;
+
+    const changingUsername = newUsername && newUsername.trim() !== "" && newUsername.trim() !== username;
+
+    if (changingUsername) {
+      // Check if new username already exists
+      const exists = admins.find(a => a.username === newUsername.trim());
+      if (exists) {
+        return { success: false, message: "Ushbu login band. Boshqa login tanlang." };
+      }
+    }
+
+    if (Object.keys(updates).length > 0 || changingUsername) {
+
+      if (changingUsername) {
+        const finalUsername = newUsername!.trim();
+        const newDocData = { ...targetUser, ...updates, username: finalUsername };
+
+        // Add to local DB under new name
+        await addAdmin(newDocData, newDocData.password || oldPass, targetUser.username);
+
+        // Delete old
+        await deleteAdmin(username, targetUser.username);
+
+        return { success: true, message: "Login va ma'lumotlar muvaffaqiyatli saqlandi", newUserObj: newDocData };
+      } else {
+        await updateAdmin(username, updates, username);
+        return { success: true, message: "Ma'lumotlar muvaffaqiyatli saqlandi", newUserObj: { ...targetUser, ...updates } };
+      }
+    }
+
+    return { success: false, message: "O'zgarishlar kiritilmadi" };
+  } catch (error) {
+    console.error("Credentials update error:", error);
+    return { success: false, message: "Tizim xatosi yuz berdi" };
+  }
+};
+
+export const logSystemAction = async (action: 'LOGIN' | 'DATA_UPLOAD' | 'DATA_DELETE' | 'ADMIN_ADD' | 'ADMIN_DELETE' | 'ADMIN_UPDATE' | 'DATA_UPDATE', username: string, details: string) => {
   const logEntry = {
     id: String(Date.now()) + Math.random().toString(36).substr(2, 9),
     timestamp: Date.now(),
@@ -653,15 +778,23 @@ export const getSystemLogs = async (): Promise<any[]> => {
 };
 
 // Updated saveDailyReport to include user logging
-export const saveDailyReport = async (date: string, newRawData: string, newWagons: Wagon[], stations: Station[], user?: AdminUser): Promise<{ success: boolean, backendSaved: boolean, report?: any, message?: string }> => {
+export const saveDailyReport = async (
+  date: string,
+  wagons: Wagon[],
+  rawData: string,
+  sections: any[],
+  staticStations: any[],
+  uploadedBy: string,
+  trainIdentifiers?: string[]
+): Promise<{ success: boolean, backendSaved: boolean, report?: any, message?: string }> => {
   const cleanDate = date.trim();
   const timestamp = Date.now();
 
   // Log the action
-  if (user) {
-    const wagonCount = newWagons.length;
-    logSystemAction('DATA_UPLOAD', user.username, `Uploaded ${wagonCount} wagons for date ${cleanDate}`);
-  }
+  const wagonCount = wagons.length;
+  const uniqueTrains = Array.from(new Set(wagons.map(w => w.trainIndex?.trim()).filter(Boolean)));
+  const trainListStr = uniqueTrains.length > 0 ? ` (Poezdlar: ${uniqueTrains.join(', ')})` : '';
+  logSystemAction('DATA_UPLOAD', uploadedBy, `Yuklandi: ${wagonCount} vagon, sana: ${cleanDate}${trainListStr}`);
 
   // Deduplicate raw blocks into a section pool to save massive space
   const sectionPool: string[] = [];
@@ -695,23 +828,20 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
     };
   };
 
-  const minifiedNewWagons = newWagons.map(toMinified);
+  const minifiedNewWagons = wagons.map(toMinified);
 
   const fullPayload: any = {
     date: cleanDate,
-    rawData: newRawData || "",
+    rawData: rawData || "",
     wagons: minifiedNewWagons,
     sections: sectionPool,
-    timestamp
+    timestamp,
+    uploadedBy
   };
-
-  if (user) {
-    fullPayload.uploadedBy = user.username;
-  }
 
   // Improved Merge Logic: Composite Key to preserve history/movements
   // AND enforces minification on all wagons
-  const mergeWagons = (oldWagons: any[], newWagons: any[], oldSections: string[] = []) => {
+  const mergeWagons = (oldWagons: any[], newWagonsArray: any[], oldSections: string[] = []) => {
     const map = new Map<string, any>();
     const getKey = (w: any) => w.n;
 
@@ -725,7 +855,7 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
     });
 
     // 2. Add new wagons
-    newWagons.forEach(w => {
+    newWagonsArray.forEach(w => {
       const rb = w.rb ?? w.rawBlock;
       const si = getSectionIndex(rb);
       const min = { ...toMinified(w), si };
@@ -765,21 +895,15 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
 
       const mergedPayload: any = {
         date: cleanDate,
-        rawData: mergeRawData(existingData.rawData || "", newRawData),
+        rawData: mergeRawData(existingData.rawData || "", rawData),
         wagons: mergedWagons,
         sections: sectionPool,
-        timestamp
+        timestamp,
+        uploadedBy // Preserve newest uploadership
       };
 
-      if (user) {
-        mergedPayload.uploadedBy = user.username;
-      }
-      // If updating an existing doc as normal user, you overwrite the uploader. 
-      // If we don't want that, we keep the original: `existingData.uploadedBy || user.username`
-      // Let's ensure ownership transfers to the latest uploader:
-
-      const res = await fetch(`${API_URL}/reports`, {
-        method: 'POST',
+      const res = await fetch(`${API_URL}/reports/${cleanDate}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: safeStringify(mergedPayload)
       });
@@ -797,13 +921,13 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
           const sfDoc = await transaction.get(docRef);
 
           let finalWagons = minifiedNewWagons;
-          let finalRawData = newRawData;
+          let finalRawData = rawData;
           let finalSections = sectionPool;
 
           if (sfDoc.exists()) {
             const data = sfDoc.data();
             finalWagons = mergeWagons(data.wagons || [], minifiedNewWagons, data.sections || []);
-            finalRawData = mergeRawData(data.rawData || "", newRawData);
+            finalRawData = mergeRawData(data.rawData || "", rawData);
             finalSections = sectionPool;
           }
 
@@ -812,12 +936,9 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
             rawData: finalRawData,
             wagons: finalWagons,
             sections: finalSections,
-            timestamp
+            timestamp,
+            uploadedBy
           });
-
-          if (user) {
-            cleanPayload.uploadedBy = user.username;
-          }
 
           transaction.set(docRef, cleanPayload);
           finalReport = cleanPayload;
@@ -827,17 +948,18 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
       } catch (txError) {
         errorMessage = String(txError);
 
+        // Fallback
         try {
           const docSnap = await getDoc(docRef);
 
           let finalWagons = minifiedNewWagons;
-          let finalRawData = newRawData;
+          let finalRawData = rawData;
           let finalSections = sectionPool;
 
           if (docSnap.exists()) {
             const serverData = docSnap.data();
             finalWagons = mergeWagons(serverData.wagons || [], minifiedNewWagons, serverData.sections || []);
-            finalRawData = mergeRawData(serverData.rawData || "", newRawData);
+            finalRawData = mergeRawData(serverData.rawData || "", rawData);
             finalSections = sectionPool;
           }
 
@@ -846,7 +968,8 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
             wagons: finalWagons,
             rawData: finalRawData,
             sections: finalSections,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            uploadedBy
           });
 
           await setDoc(docRef, mergedPayload);
@@ -866,16 +989,11 @@ export const saveDailyReport = async (date: string, newRawData: string, newWagon
     backendSaved = false;
   }
 
-  // Notify listeners of the change
-  if (backendSaved) {
-    notifyChange('reports');
-  }
-
+  notifyChange('reports');
   return {
-    success: backendSaved,
+    success: true,
     backendSaved,
     report: finalReport,
-    message: errorMessage
+    message: backendSaved ? undefined : `Saved locally. Backend sync failed: ${errorMessage}`
   };
 };
-

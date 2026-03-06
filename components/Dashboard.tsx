@@ -116,7 +116,21 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
    const [selectedDestination, setSelectedDestination] = useState<string>('all');
    const [searchQuery, setSearchQuery] = useState<string>('');
    const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-   const [viewMode, setViewMode] = useState<'stats' | 'report' | 'cargo'>('report');
+   // Persist Inner Tab (ViewMode)
+   const [viewMode, setViewMode] = useState<'stats' | 'report' | 'cargo'>(() => {
+      try {
+         const savedMode = localStorage.getItem('dashboardViewMode');
+         return (savedMode as 'stats' | 'report' | 'cargo') || 'report';
+      } catch (e) {
+         return 'report';
+      }
+   });
+
+   useEffect(() => {
+      try {
+         localStorage.setItem('dashboardViewMode', viewMode);
+      } catch (e) { }
+   }, [viewMode]);
 
    // Train Selection State
    const [isTrainModalOpen, setIsTrainModalOpen] = useState(false);
@@ -247,6 +261,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
             } else if (w.entryPoint) {
                const cleanName = w.entryPoint.name.split('(')[0].trim();
                map[normalizedIdx] = cleanName;
+            } else {
+               map[normalizedIdx] = "Неизвестно";
             }
          }
       });
@@ -584,22 +600,22 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
 
             <div className="flex flex-wrap gap-3 items-center w-full xl:w-auto">
                {/* View Toggle */}
-               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+               <div className="flex bg-slate-900/10 p-1.5 rounded-2xl border border-slate-200/50 shadow-inner backdrop-blur-md">
                   <button
                      onClick={() => setViewMode('report')}
-                     className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${viewMode === 'report' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                     className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${viewMode === 'report' ? 'bg-white text-blue-600 shadow-[0_4px_15px_rgba(0,0,0,0.05)] ring-1 ring-black/5 scale-105' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/60'}`}
                   >
                      <Table2 className="w-4 h-4" /> {t('report')}
                   </button>
                   <button
                      onClick={() => setViewMode('stats')}
-                     className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${viewMode === 'stats' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                     className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${viewMode === 'stats' ? 'bg-white text-indigo-600 shadow-[0_4px_15px_rgba(0,0,0,0.05)] ring-1 ring-black/5 scale-105' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/60'}`}
                   >
                      <BarChart3 className="w-4 h-4" /> {t('charts')}
                   </button>
                   <button
                      onClick={() => setViewMode('cargo')}
-                     className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${viewMode === 'cargo' ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                     className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${viewMode === 'cargo' ? 'bg-white text-emerald-600 shadow-[0_4px_15px_rgba(0,0,0,0.05)] ring-1 ring-black/5 scale-105' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/60'}`}
                   >
                      <PackageOpen className="w-4 h-4" /> {t('cargo_tab')}
                   </button>

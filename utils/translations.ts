@@ -218,6 +218,25 @@ const dictionary: Record<string, Record<Language, string>> = {
 
   // No longer needed as separate entries, but kept for fallback
   "cargo_generic": { ru: "Груз", uz: "Yuk" },
+
+  // --- User Profile & Auth / Foydalanuvchi Profili ---
+  "profile_settings": { ru: "Настройки профиля", uz: "Profil Sozlamalari" },
+  "login_username": { ru: "Логин (Username)", uz: "Login (Username)" },
+  "enter_new_login": { ru: "Введите новый логин", uz: "Yangi login kiriting" },
+  "full_name": { ru: "Ф.И.О.", uz: "F.I.SH. (Ism Familiya)" },
+  "enter_name": { ru: "Введите ваше имя", uz: "Ismingizni kiriting" },
+  "security_password": { ru: "Безопасность и пароль", uz: "Xavfsizlik va Parol" },
+  "current_password": { ru: "Текущий пароль", uz: "Joriy parol" },
+  "enter_current_password": { ru: "Введите текущий пароль для подтверждения", uz: "Tasdiqlash uchun joriy parolni kiriting" },
+  "old_password_required": { ru: "Для сохранения изменений необходимо ввести старый пароль!", uz: "Har qanday o'zgarishni saqlash uchun joriy parolni kiritish majburiy!" },
+  "new_password_opt": { ru: "Новый пароль (необязательно)", uz: "Yangi parol (ixtiyoriy)" },
+  "enter_only_if_change": { ru: "Введите только если хотите изменить", uz: "Faqat o'zgartirmoqchi bo'lsangiz kiriting" },
+  "confirm_new_password": { ru: "Подтвердите новый пароль", uz: "Yangi parolni tasdiqlang" },
+  "re_enter_new_password": { ru: "Введите новый пароль еще раз", uz: "Yangi parolni qayta kiriting" },
+  "logout": { ru: "Выйти", uz: "Chiqish" },
+  "validation_error_old_pass": { ru: "Необходимо ввести старый пароль.", uz: "Eski parolni kiritish shart." },
+  "validation_error_mismatch": { ru: "Пароли не совпадают.", uz: "Parollar mos kelmadi." },
+  "system_error": { ru: "Произошла системная ошибка", uz: "Tizim xatosi yuz berdi" },
 };
 
 export const getTranslation = (key: string, lang: Language): string => {

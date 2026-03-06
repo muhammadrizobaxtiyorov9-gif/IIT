@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Wagon, Language, Station } from '../types';
 import { getCargoNameTranslated, getTranslation } from '../utils/translations';
 import { PackageOpen, TrendingUp, BarChart3, Weight, Box, ChevronDown, ChevronUp } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, AreaChart, Area, LabelList } from 'recharts';
 import { motion } from 'framer-motion';
 
 interface CargoInfographicsProps {
@@ -423,7 +423,7 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
             <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Donut Chart: Cargo Breakdown */}
-                <div className="col-span-1 bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-hidden">
+                <div className="col-span-1 bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 relative">
                     <h3 className="text-lg font-black text-slate-800 mb-2 relative z-10">{lang === 'uz' ? 'Yuk turlari taqsimoti' : 'Распределение грузов (по весу)'}</h3>
                     <div className="h-[280px] relative z-10">
                         <ResponsiveContainer width="100%" height="100%">
@@ -443,7 +443,7 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <RechartsTooltip content={<CustomTooltip />} />
+                                <RechartsTooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 1000 }} />
                             </PieChart>
                         </ResponsiveContainer>
                         {/* Center Metric */}
@@ -497,9 +497,13 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
                                     tickLine={false}
                                     tickFormatter={(val) => `${val / 1000}k`}
                                 />
-                                <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: '#f8fafc', radius: 8 }} />
-                                <Bar dataKey="Импорт" stackId="a" fill="#6366f1" radius={[0, 0, 8, 8]} />
-                                <Bar dataKey="Транзит" stackId="a" fill="#fbbf24" radius={[8, 8, 0, 0]} />
+                                <RechartsTooltip content={<CustomBarTooltip />} cursor={{ fill: '#f8fafc', radius: 8 }} wrapperStyle={{ zIndex: 1000 }} />
+                                <Bar dataKey="Импорт" stackId="a" fill="#6366f1" radius={[0, 0, 8, 8]}>
+                                    <LabelList dataKey="Импорт" position="center" fill="#ffffff" fontSize={11} fontWeight="bold" formatter={(val: number) => val > 0 ? `${(val / 1000).toFixed(0)}k` : ''} />
+                                </Bar>
+                                <Bar dataKey="Транзит" stackId="a" fill="#fbbf24" radius={[8, 8, 0, 0]}>
+                                    <LabelList dataKey="Транзит" position="center" fill="#ffffff" fontSize={11} fontWeight="bold" formatter={(val: number) => val > 0 ? `${(val / 1000).toFixed(0)}k` : ''} />
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -541,6 +545,7 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
                                         tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`}
                                     />
                                     <RechartsTooltip
+                                        wrapperStyle={{ zIndex: 1000 }}
                                         content={({ active, payload }) => {
                                             if (active && payload && payload.length) {
                                                 return (
