@@ -1208,14 +1208,9 @@ const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 relative flex flex-col h-full overflow-hidden bg-transparent w-full min-w-0 z-10">
 
-        {/* Removed GlobalClock per user request. Top header now acts purely as spacing or future breadcrumbs/search */}
-        <div className="h-16 border-b border-white/5 bg-[#0B1121]/80 backdrop-blur-2xl flex items-center justify-between px-6 shrink-0 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.3)]">
-          <div className="flex-1"></div>
-        </div>
-
-        {/* Sleek Top-Bar Loading Overlay (Replaces intrusive full-screen blocking modal) */}
+        {/* Sleek Top-Bar Loading Overlay */}
         {loading && (
-          <div className="absolute top-16 left-0 right-0 h-1 bg-slate-100 z-[100] overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-slate-100 z-[100] overflow-hidden">
             <div className="h-full bg-blue-600 animate-[loading-bar_1.5s_ease-in-out_infinite] origin-left"></div>
             <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg border border-slate-700 whitespace-nowrap animate-in slide-in-from-top-2 fade-in">
               {loadingStatus}
