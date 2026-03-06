@@ -12,8 +12,8 @@ import AdminPage from './components/AdminPage';
 import { LoginPage } from './components/LoginPage';
 import { AdminPanel } from './components/AdminPanel';
 import UserProfileModal from './components/UserProfileModal';
-import { GlobalClock } from './components/GlobalClock'; // <-- new import
-import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle, User as UserIcon, TrainFront } from 'lucide-react';
+import SystemLogs from './components/SystemLogs';
+import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle, User as UserIcon, TrainFront, ClipboardList } from 'lucide-react';
 // @ts-ignore
 import mammoth from 'mammoth';
 import { logger } from './utils/logger'; // Import Logger
@@ -329,10 +329,10 @@ const App: React.FC = () => {
   const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка...');
 
   // Load last active tab from F5 persistence
-  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin'>(() => {
+  const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin' | 'logs'>(() => {
     try {
       const saved = localStorage.getItem('activeTab') as any;
-      if (saved && ['home', 'dashboard', 'input', 'admin'].includes(saved)) {
+      if (saved && ['home', 'dashboard', 'input', 'admin', 'logs'].includes(saved)) {
         return saved;
       }
     } catch (e) { }
@@ -493,7 +493,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     if (currentUser) {
-      logSystemAction('LOGIN', currentUser.username, 'User logged out');
+      logSystemAction('LOGIN', currentUser.username, 'User logged out', currentUser.role);
     }
     setCurrentUser(null);
     try {
@@ -1140,13 +1140,19 @@ const App: React.FC = () => {
           </div>
           <NavItem id="input" label={t('nav_input')} icon={FileText} />
 
-          {currentUser?.role !== 'user' && (
+          {/* Settings - superadmin only */}
+          {currentUser?.role === 'superadmin' && (
             <>
               <div className={`mt-6 mb-3 px-2 text-[10px] font-black uppercase tracking-widest text-slate-600 ${isCollapsed ? 'text-center opacity-0' : 'opacity-100 transition-opacity'}`}>
                 {t('nav_system')}
               </div>
               <NavItem id="admin" label={t('nav_admin')} icon={Settings} />
             </>
+          )}
+
+          {/* Logs - admin & superadmin */}
+          {currentUser?.role !== 'user' && (
+            <NavItem id="logs" label={lang === 'uz' ? 'Tizim Tarixi' : 'История'} icon={ClipboardList} />
           )}
 
           {currentUser?.role === 'superadmin' && (
@@ -1223,7 +1229,13 @@ const App: React.FC = () => {
           {(activeTab === 'home' || activeTab === 'admin') && (
             <div className="flex-1 overflow-hidden relative h-full w-full">
               {activeTab === 'home' && <HomePage wagons={wagons} mapPoints={mapPoints} mtuRegions={mtuRegions} lang={lang} t={t} />}
-              {activeTab === 'admin' && <AdminPage mapPoints={mapPoints} setMapPoints={setMapPoints} mtuRegions={mtuRegions} setMtuRegions={setMtuRegions} lang={lang} t={t} />}
+              {activeTab === 'admin' && currentUser?.role === 'superadmin' && <AdminPage mapPoints={mapPoints} setMapPoints={setMapPoints} mtuRegions={mtuRegions} setMtuRegions={setMtuRegions} lang={lang} t={t} />}
+            </div>
+          )}
+
+          {activeTab === 'logs' && currentUser?.role !== 'user' && (
+            <div className="flex-1 overflow-auto h-full w-full">
+              <SystemLogs lang={lang} t={t} currentUser={currentUser!} />
             </div>
           )}
 

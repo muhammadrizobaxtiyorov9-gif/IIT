@@ -785,19 +785,24 @@ export const changeUserCredentials = async (username: string, oldPass: string, n
   }
 };
 
-export const logSystemAction = async (action: 'LOGIN' | 'DATA_UPLOAD' | 'DATA_DELETE' | 'ADMIN_ADD' | 'ADMIN_DELETE' | 'ADMIN_UPDATE' | 'DATA_UPDATE', username: string, details: string) => {
-  const logEntry = {
+export const logSystemAction = async (
+  action: 'LOGIN' | 'DATA_UPLOAD' | 'DATA_DELETE' | 'ADMIN_ADD' | 'ADMIN_DELETE' | 'ADMIN_UPDATE' | 'DATA_UPDATE',
+  username: string,
+  details: string,
+  userRole?: string
+) => {
+  const logEntry: any = {
     id: String(Date.now()) + Math.random().toString(36).substr(2, 9),
     timestamp: Date.now(),
     action,
     username,
-    details
+    details,
+    userRole: userRole || 'unknown'
   };
 
   try {
     if (USE_LOCAL_BACKEND) {
       // In a real local backend, we would POST to /logs
-      // For now, we might just console log or store in LS if needed, but let's skip LS for logs to avoid quota issues
     } else if (db) {
       await setDoc(doc(db, "logs", logEntry.id), logEntry);
     }

@@ -24,7 +24,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, lang }) => {
     try {
       const user = await verifyAdmin(username.trim(), password.trim(), navigator.userAgent);
       if (user) {
-        await logSystemAction('LOGIN', user.username, 'User logged in');
+        await logSystemAction('LOGIN', user.username, 'User logged in', user.role);
         onLogin(user);
       } else {
         setError(lang === 'uz' ? 'Login yoki parol noto\'g\'ri' : 'Неверный логин или пароль');
