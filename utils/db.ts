@@ -1,7 +1,7 @@
 
 import { initializeApp } from 'firebase/app';
 import {
-  getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, orderBy, where,
+  getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc, query, orderBy, where, documentId,
   enableIndexedDbPersistence, runTransaction, setLogLevel,
   DocumentSnapshot, QuerySnapshot, DocumentData
 } from 'firebase/firestore';
@@ -213,11 +213,25 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 3000): Promise<T> => {
 
 // --- API FUNCTIONS (HYBRID STRATEGY WITH TRANSACTION) ---
 
+// Generates a cryptographically random immutable user UID.
+// Falls back to a timestamp+random combo if crypto API is unavailable.
+const generateUid = (): string => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  return Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 12);
+};
+
+
 // Helper: builds the Firestore doc ID for a user-scoped report
-// Admins use just the date (for backwards compat), users use date__username
-const getDocId = (date: string, uploadedBy?: string): string => {
-  if (!uploadedBy) return date; // admin / backwards compat
-  return `${date}__${uploadedBy}`;
+// Uses immutable uid when available so renames don't break data links.
+// Admin uploads use date__uid; legacy/no-uid fallback uses date__username.
+const getDocId = (date: string, uploadedBy?: string, uid?: string): string => {
+  if (!uploadedBy) return date; // backwards compat
+  if (uid) return `${date}__${uid}`;
+  return `${date}__${uploadedBy}`; // fallback
 };
 
 const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
@@ -263,13 +277,29 @@ export const getReportByDate = async (date: string, userContext?: AdminUser): Pr
       }
     } else if (db) {
       if (isUser) {
-        // Fetch user-scoped doc directly: date__username
-        const docId = getDocId(cleanDate, userContext!.username);
+        // Fetch user-scoped doc directly: prefer date__uid, fallback to date__username
+        const userUid = userContext!.uid;
+        const docId = userUid
+          ? getDocId(cleanDate, userContext!.username, userUid)
+          : getDocId(cleanDate, userContext!.username);
         const docSnap = await withTimeout(getDoc(doc(db, "reports", docId))) as DocumentSnapshot<DocumentData>;
         if (docSnap.exists()) {
           const report = unMinifyReport(cleanDate, docSnap.data());
           LS.saveReport(cleanDate, report);
           return report;
+        }
+        // Fallback: try the other format (uid-less)
+        if (userUid) {
+          const fallbackId = getDocId(cleanDate, userContext!.username);
+          const fallbackSnap = await withTimeout(getDoc(doc(db, "reports", fallbackId))) as DocumentSnapshot<DocumentData>;
+          if (fallbackSnap.exists()) {
+            const data = fallbackSnap.data();
+            if (data.uploadedBy === userContext!.username) {
+              const report = unMinifyReport(cleanDate, data);
+              LS.saveReport(cleanDate, report);
+              return report;
+            }
+          }
         }
         // Also try legacy date-only doc (migration compatibility)
         const legacySnap = await withTimeout(getDoc(doc(db, "reports", cleanDate))) as DocumentSnapshot<DocumentData>;
@@ -283,12 +313,13 @@ export const getReportByDate = async (date: string, userContext?: AdminUser): Pr
         }
       } else {
         // Admin/superadmin: query all docs whose ID starts with cleanDate
-        // Use range query: date <= docId < date + "\uf8ff"
+        // MUST use documentId() sentinel — NOT the string "__name__"
         const coll = collection(db, "reports");
-        const q = query(coll,
-          orderBy("__name__"),
-          where("__name__", ">=", cleanDate),
-          where("__name__", "<=", cleanDate + "\uf8ff")
+        const q = query(
+          coll,
+          orderBy(documentId()),
+          where(documentId(), ">=", cleanDate),
+          where(documentId(), "<=", cleanDate + "\uf8ff")
         );
         const snap = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
         if (!snap.empty) {
@@ -355,15 +386,19 @@ export const getReportDates = async (userContext?: AdminUser): Promise<string[]>
         });
       }
     } else if (db) {
-      let q = collection(db, "reports") as any;
-      if (userContext && userContext.role === 'user') {
-        q = query(q, where("uploadedBy", "==", userContext.username));
+      // For regular users: query by uploadedBy field
+      // For admins: get all docs in reports collection
+      let q: any = collection(db, "reports");
+      if (isUser) {
+        q = query(q, where("uploadedBy", "==", userContext!.username));
       }
       const snapshot = await withTimeout(getDocs(q)) as QuerySnapshot<DocumentData>;
-      snapshot.docs.forEach(doc => {
-        const d = doc.data();
-        if (!userContext || userContext.role !== 'user' || d.uploadedBy === userContext.username) {
-          dates.add(doc.id);
+      snapshot.docs.forEach(docSnap => {
+        const rawId = docSnap.id; // may be "2026-03-08" or "2026-03-08__alice"
+        // Extract just the date part (before any "__" separator)
+        const dateOnly = rawId.includes('__') ? rawId.split('__')[0] : rawId;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+          dates.add(dateOnly);
         }
       });
     }
@@ -630,6 +665,11 @@ export const verifyAdmin = async (username: string, pass: string, deviceInfo: st
           data.role = 'superadmin';
           await setDoc(docRef, { role: 'superadmin' }, { merge: true }).catch(() => { });
         }
+        // AUTO-MIGRATE: assign immutable uid if user doesn't have one yet
+        if (!data.uid) {
+          data.uid = generateUid();
+          await setDoc(docRef, { uid: data.uid }, { merge: true }).catch(() => { });
+        }
         await setDoc(docRef, { lastLogin: Date.now(), deviceInfo }, { merge: true }).catch(() => { });
         return data;
       } else if (username === 'admin' && pass === 'admin') {
@@ -692,7 +732,9 @@ export const subscribeToAdmins = (onUpdate: (admins: AdminUser[]) => void): () =
 };
 
 export const addAdmin = async (admin: AdminUser, pass: string, creator?: string): Promise<boolean> => {
-  const newAdmin = { ...admin, password: pass, createdBy: creator };
+  // Ensure every new user has an immutable uid
+  const uid = admin.uid || generateUid();
+  const newAdmin = { ...admin, uid, password: pass, createdBy: creator };
   LS.saveAdmin(newAdmin);
   notifyChange('admins');
 
@@ -970,7 +1012,17 @@ export const saveDailyReport = async (
 
     } else if (db) {
       // Use composite doc ID for data isolation per user
-      const docId = getDocId(cleanDate, uploadedBy);
+      // Prefer uid-based key for immutability; fall back to username for legacy
+      const userUid = uploadedBy ? await (async () => {
+        try {
+          if (db) {
+            const uSnap = await getDoc(doc(db, "admins", uploadedBy));
+            if (uSnap.exists()) return uSnap.data()?.uid as string | undefined;
+          }
+        } catch {}
+        return undefined;
+      })() : undefined;
+      const docId = getDocId(cleanDate, uploadedBy, userUid);
       const docRef = doc(db, "reports", docId);
 
       try {

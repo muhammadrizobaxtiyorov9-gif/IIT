@@ -66,21 +66,21 @@ const SystemLogs: React.FC<SystemLogsProps> = ({ lang, currentUser }) => {
     const isSuperAdmin = currentUser.role === 'superadmin';
     const ul = lang === 'uz';
 
-    const fetchLogs = async () => {
-        setLoading(true);
+    const fetchLogs = async (showSpinner = false) => {
+        if (showSpinner) setLoading(true);
         try {
             const all = await getSystemLogs();
             setLogs(all);
         } catch {
-            setLogs([]);
+            if (showSpinner) setLogs([]);
         } finally {
-            setLoading(false);
+            if (showSpinner) setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchLogs();
-        const iv = setInterval(fetchLogs, 30000);
+        fetchLogs(true); // initial load: show spinner
+        const iv = setInterval(() => fetchLogs(false), 30000); // silent background refresh
         return () => clearInterval(iv);
     }, []);
 
@@ -219,7 +219,7 @@ const SystemLogs: React.FC<SystemLogsProps> = ({ lang, currentUser }) => {
                 </button>
 
                 {/* Refresh */}
-                <button onClick={fetchLogs} disabled={loading}
+                <button onClick={() => fetchLogs(true)} disabled={loading}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 font-bold transition-colors disabled:opacity-50">
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     {ul ? 'Yangilash' : 'Обновить'}
@@ -266,6 +266,31 @@ const SystemLogs: React.FC<SystemLogsProps> = ({ lang, currentUser }) => {
                             const isExpanded = expandedId === log.id;
                             const roleLabel = log.userRole === 'superadmin' ? 'SuperAdmin' : log.userRole === 'admin' ? 'Admin' : log.userRole === 'user' ? 'User' : '';
 
+                            // Parse train indexes from details for DATA_UPLOAD
+                            // Expected format: "... (Poezdlar: 3002 (7571+014+7453))"
+                            let trainIndexes: string[] = [];
+                            let wagonCount = '';
+                            if (log.action === 'DATA_UPLOAD' && log.details) {
+                                // Extract wagon count
+                                const wagonMatch = log.details.match(/(\d+)\s*vagon/i);
+                                if (wagonMatch) wagonCount = wagonMatch[1];
+
+                                // Extract train list — content inside first set of parens after "Poezdlar:"
+                                const poezdMatch = log.details.match(/Poezdlar[:\s]+([^\)]+)\(([^\)]+)\)/i);
+                                if (poezdMatch) {
+                                    // poezdMatch[1] is main train index, poezdMatch[2] is sub-indexes
+                                    const mainTrain = poezdMatch[1].trim();
+                                    const subTrains = poezdMatch[2].split('+').map((s: string) => s.trim()).filter(Boolean);
+                                    trainIndexes = [mainTrain, ...subTrains].filter(Boolean);
+                                } else {
+                                    // Fallback: try simpler "(Poezdlar: X, Y, Z)" pattern
+                                    const simpleMatch = log.details.match(/Poezdlar[:\s]+([^\)]+)/i);
+                                    if (simpleMatch) {
+                                        trainIndexes = simpleMatch[1].split(/[,+]/).map((s: string) => s.trim()).filter(Boolean);
+                                    }
+                                }
+                            }
+
                             return (
                                 <div key={log.id || idx}
                                     className="p-4 hover:bg-slate-50/70 transition-colors cursor-pointer"
@@ -300,7 +325,23 @@ const SystemLogs: React.FC<SystemLogsProps> = ({ lang, currentUser }) => {
                                                     <Clock className="w-3 h-3" />
                                                     {formatTs(log.timestamp, lang)}
                                                 </span>
+                                                {wagonCount && (
+                                                    <span className="text-slate-400 font-bold">
+                                                        {wagonCount} vagon
+                                                    </span>
+                                                )}
                                             </div>
+                                            {/* Inline train badges for DATA_UPLOAD */}
+                                            {trainIndexes.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                                    {trainIndexes.map((train, ti) => (
+                                                        <span key={ti}
+                                                            className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-mono font-black text-emerald-700">
+                                                            🚂 {train}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <ChevronDown className={`flex-none w-4 h-4 text-slate-300 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                                     </div>

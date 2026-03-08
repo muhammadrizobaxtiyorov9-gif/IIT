@@ -92,7 +92,8 @@ export interface AppSettings {
 export type UserRole = 'superadmin' | 'admin' | 'user';
 
 export interface AdminUser {
-  username: string; // Document ID
+  uid?: string;     // Immutable unique ID — never changes even if username/login is changed
+  username: string; // Document ID (login) — can change
   password?: string; // Stored (in a real app, should be hashed)
   role: UserRole;
   name?: string; // Display name
