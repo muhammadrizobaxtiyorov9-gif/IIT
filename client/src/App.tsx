@@ -1,8 +1,7 @@
-﻿
+
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Station, Wagon, MapPoint, MtuRegion, Language, DateRange, AdminUser } from './types';
-import { RAW_STATION_DATA } from './constants';
-import { parseStationData, rehydrateWagons, parseOperationalDataGenerator, groupDataByDate, extractReportDate, calculateRailwayDate } from './utils/parser';
+import { loadStationDataAsync, rehydrateWagons, parseOperationalDataGenerator, groupDataByDate, extractReportDate, calculateRailwayDate } from './utils/parser';
 import { cleanDataWithAI } from './utils/aiService';
 import { saveDailyReport, getReportByDate, getReportsInRange, subscribeToSettings, getReportDates, deleteTrainFromReport, logSystemAction } from './utils/db';
 import { getTranslation } from './utils/translations';
@@ -13,7 +12,8 @@ import { LoginPage } from './components/auth/LoginPage';
 import { AdminPanel } from './components/admin/AdminPanel';
 import UserProfileModal from './components/shared/UserProfileModal';
 import SystemLogs from './components/admin/SystemLogs';
-import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle, User as UserIcon, TrainFront, ClipboardList } from 'lucide-react';
+import { FileText, RefreshCw, FileUp, Menu, Train, LayoutDashboard, Sparkles, Wand2, Home, ChevronRight, Settings, Calendar as CalendarIcon, Database, Save, ChevronLeft, ChevronRight as ChevronRightIcon, PanelLeftClose, PanelLeftOpen, ArrowRight, Languages, Eye, X, Copy, AlertCircle, LogOut, Shield, CheckCircle, User as UserIcon, TrainFront, ClipboardList, Upload, CheckCircle2, Download, Map as MapIcon, Loader2, ArrowRightLeft, Plus, Clock, Search, RotateCcw, UserCircle2, Filter, Trash2, ArrowUpRight, ArrowDownRight, RefreshCcw, Fingerprint, CalendarDays, BarChart4, PieChart } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, Legend, Cell, PieChart as RechartsPieChart, Pie } from 'recharts';
 // @ts-ignore
 import mammoth from 'mammoth';
 import { logger } from './utils/logger'; // Import Logger
@@ -321,12 +321,27 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('ru');
   const t = (key: string) => getTranslation(key, lang);
 
-  const staticStations = useMemo(() => parseStationData(RAW_STATION_DATA), []);
-
-  const [stations, setStations] = useState<Station[]>(staticStations);
+  const [stations, setStations] = useState<Station[]>([]);
   const [wagons, setWagons] = useState<Wagon[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка...');
+  const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка станций...');
+
+  // Async station loader (Hydrates 22,000+ stations)
+  useEffect(() => {
+    const fetchStations = async () => {
+      try {
+        const loadedStations = await loadStationDataAsync();
+        setStations(loadedStations);
+        console.log(`Loaded ${loadedStations.length} railway stations.`);
+      } catch (err) {
+        console.error("Failed to load railway stations on mount", err);
+      } finally {
+        setLoading(false);
+        setLoadingStatus('Загрузка...');
+      }
+    };
+    fetchStations();
+  }, []);
 
   // Load last active tab from F5 persistence
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin' | 'logs'>(() => {
@@ -523,6 +538,46 @@ const App: React.FC = () => {
     }
   };
 
+  const handleApiSync = async () => {
+    const selectedDate = dateRange.endDate;
+    console.log(`Starting API sync for ${selectedDate}...`);
+    
+    try {
+      setLoading(true);
+      setLoadingStatus(`API дан маълумотлар тортилмоқда (${selectedDate})...`);
+      
+      const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000/api';
+      const toastId = toast.loading(`API сўров юборилди: ${selectedDate}`);
+      
+      try {
+        const r = await fetch(`${API_BASE}/integration/sync`, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: selectedDate })
+        });
+        if (!r.ok) {
+            const errText = await r.text();
+            throw new Error(errText || 'Синхронизацияда хатолик yuz berdi');
+        }
+        const report = await r.json();
+        console.log("Local backenddan kelgan ma'lumot:", report);
+        toast.success('Маълумотлар API дан муваффақиятли янгиланди!', { id: toastId });
+      } catch (err: any) {
+        toast.error(`Хатолик: ${err?.message || 'Синхронизацияда хатолик'}`, { id: toastId });
+        throw err; // Re-throw to hit the outer catch block for logging
+      }
+      
+      // Reload data from DB after successful sync
+      await loadDataForRange(dateRange);
+      
+    } catch (error) {
+      console.error('API sync failed:', error);
+    } finally {
+      setLoading(false);
+      setLoadingStatus('Загрузка...');
+    }
+  };
+
   const loadDataForRange = async (range: DateRange) => {
     setLoading(true);
     setLoadingStatus(t('getting_data'));
@@ -537,25 +592,19 @@ const App: React.FC = () => {
         // Sort reports by date ascending to ensure latest status overrides previous
         reports.sort((a, b) => a.date.localeCompare(b.date));
 
-        // Use a Map to deduplicate wagons by Number, keeping the latest one
-        const uniqueWagons = new Map<string, any>();
-
         reports.forEach(r => {
           combinedRawData += `\n--- [${r.date}] ---\n` + (r.rawData || "");
           if (r.wagons) {
-            const rehydrated = rehydrateWagons(r.wagons, staticStations, r.sections || []);
+            const rehydrated = rehydrateWagons(r.wagons, stations, r.sections || []);
             rehydrated.forEach(w => {
               w.reportDate = r.date; // Inject DB reporting date (18:00 cutoff)
-              // Key by wagon number
-              if (w.number) uniqueWagons.set(w.number, w);
+              // Preserve all wagons without deduplicating by wagon number
+              combinedWagons.push(w);
             });
           }
         });
 
-        // Get the rehydrated unique wagons
-        combinedWagons = Array.from(uniqueWagons.values());
-
-        setStations(staticStations);
+        // Stations are managed globally via loadStationDataAsync now
         setWagons(combinedWagons);
         setViewableRawData(combinedRawData.trim());
         setIsDataFromDb(true);
@@ -579,7 +628,7 @@ const App: React.FC = () => {
   const runParserAsync = async (rawData: string): Promise<{ wagons: Wagon[], errors: string[] }> => {
     return new Promise<{ wagons: Wagon[], errors: string[] }>((resolve, reject) => {
       try {
-        const generator = parseOperationalDataGenerator(rawData, staticStations, lang);
+        const generator = parseOperationalDataGenerator(rawData, stations, lang);
         let allWagons: Wagon[] = [];
         let allErrors: string[] = [];
 
@@ -697,7 +746,7 @@ const App: React.FC = () => {
             parsedWagons,
             chunkRawData,
             [], // sections
-            staticStations,
+            stations,
             currentUser?.username || 'unknown',
             uniqueTrains
           );
@@ -707,7 +756,7 @@ const App: React.FC = () => {
 
             if (result.report) {
               if (result.report.wagons) {
-                const rehydrated = rehydrateWagons(result.report.wagons, staticStations, result.report.sections);
+                const rehydrated = rehydrateWagons(result.report.wagons, stations, result.report.sections);
                 allSavedWagons.push(...rehydrated);
               }
               if (result.report.rawData) {
@@ -742,7 +791,7 @@ const App: React.FC = () => {
       }
 
       // 3. Update UI
-      setStations(staticStations);
+      // Stations are hydrated globally via loadStationDataAsync in useEffect
       setWagons(allSavedWagons); // Show everything we just processed
 
       if (shouldSave && savedDates.length > 0) {
@@ -822,36 +871,38 @@ const App: React.FC = () => {
 
 
 
-  // --- TRAIN COUNTING LOGIC (SMART DEDUPLICATION) ---
+  // --- TRAIN COUNTING LOGIC ---
   const trainCount = useMemo(() => {
+    // If we have loaded wagons (e.g., from DB or API), count unique train indexes
+    if (wagons.length > 0) {
+      const uniqueIndexes = new Set<string>();
+      wagons.forEach(w => {
+        if (w.trainIndex) uniqueIndexes.add(w.trainIndex.trim());
+      });
+      return uniqueIndexes.size;
+    }
+
+    // Fallback for raw text input before saving
     if (!customOpData) return 0;
-
-    // Set to store unique signatures
+    
     const uniqueTrains = new Set<string>();
-
-    // PRIORITY 1: Train Index Pattern (A+B+C)
-    // Matches: "(6980+05+7400)" or "(6980+989+7258)"
     const indexRegex = /\(\s*\d+\s*\+\s*\d+\s*\+\s*\d+\s*\)/g;
     let match;
     let hasIndexes = false;
 
     while ((match = indexRegex.exec(customOpData)) !== null) {
-      // Remove spaces to normalize
       uniqueTrains.add(match[0].replace(/\s/g, ''));
       hasIndexes = true;
     }
 
-    // PRIORITY 2: (: ... :) Blocks (Fallback ONLY if no indexes found)
     if (!hasIndexes) {
       const sostavRegex = /\(:/g;
       const sostavMatches = customOpData.match(sostavRegex);
       if (sostavMatches) return sostavMatches.length;
     }
 
-    // Return unique count
     return uniqueTrains.size;
-
-  }, [customOpData]);
+  }, [wagons, customOpData]);
 
   const readFileContent = async (file: File): Promise<string> => {
     try {
@@ -1274,8 +1325,21 @@ const App: React.FC = () => {
                           {t('selected_date')}: <span className="text-slate-900 font-bold bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-sm mx-1">{dateRange.endDate}</span>
                         </p>
                       </div>
-                      <div className="hidden lg:flex bg-blue-50/80 px-4 py-2.5 rounded-xl border border-blue-100 text-blue-700 text-xs font-bold items-center shadow-sm backdrop-blur-sm">
-                        <Database className="w-4 h-4 mr-2" /> {t('db_connected')}
+                      <div className="flex flex-col gap-3 items-end">
+                        <div className="hidden lg:flex bg-blue-50/80 px-4 py-2.5 rounded-xl border border-blue-100 text-blue-700 text-xs font-bold items-center shadow-sm backdrop-blur-sm w-fit">
+                          <Database className="w-4 h-4 mr-2" /> {t('db_connected')}
+                        </div>
+                        {currentUser?.role === 'superadmin' && (
+                          <button 
+                            onClick={handleApiSync}
+                            disabled={loading}
+                            title="Apidan ma'lumotni saqlash (kesmasdan)"
+                            className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all ${loading ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-600 hover:-translate-y-0.5 text-white active:translate-y-0 hover:shadow-emerald-500/30'}`}
+                          >
+                            <Database className={`w-4 h-4 ${loading ? 'animate-pulse text-emerald-700' : 'text-white'}`} />
+                            {loading ? 'API ga ulanmoqda...' : 'E-Nəkl API Sinxronizatsiya'}
+                          </button>
+                        )}
                       </div>
                     </div>
 

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Wagon, Language, Station } from '../../types';
 import { getCargoNameTranslated, getTranslation } from '../../utils/translations';
 import { PackageOpen, TrendingUp, BarChart3, Weight, Box, ChevronDown, ChevronUp } from 'lucide-react';
@@ -426,7 +426,7 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
                 <div className="col-span-1 bg-white/90 backdrop-blur-xl rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/40 relative">
                     <h3 className="text-lg font-black text-slate-800 mb-2 relative z-10">{lang === 'uz' ? 'Yuk turlari taqsimoti' : 'Распределение грузов (по весу)'}</h3>
                     <div className="h-[280px] relative z-10">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                             <PieChart>
                                 <Pie
                                     data={topCargoPie}
@@ -479,7 +479,7 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
                         </div>
                     </div>
                     <div className="flex-1 min-h-[300px] w-full mt-2">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                             <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }} barSize={32}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis
@@ -522,7 +522,7 @@ const CargoInfographics: React.FC<CargoInfographicsProps> = ({ wagons, lang }) =
                             <h3 className="text-lg font-black text-slate-800">{lang === 'uz' ? 'Kunlik kelib tushish dinamikasi' : 'Временная динамика поступления'}</h3>
                         </div>
                         <div className="flex-1 w-full min-h-[160px]">
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                                 <AreaChart data={extendedInsights.dailyDynamics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">

@@ -9,8 +9,10 @@ import { DailyReport, AppSettings, Wagon, Station, MapPoint, MtuRegion, AdminUse
 import { logger } from './logger'; // Import logger
 
 // --- CONFIGURATION FROM .ENV ---
-const API_URL = process.env.VITE_API_URL || 'http://localhost:3001/api';
-const USE_LOCAL_BACKEND = process.env.VITE_USE_LOCAL_BACKEND === 'true';
+// @ts-ignore: Vite env object
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// @ts-ignore: Vite env object
+const USE_LOCAL_BACKEND = import.meta.env.VITE_USE_LOCAL_BACKEND !== 'false'; // Default to true if undefined
 
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
@@ -220,7 +222,7 @@ const generateUid = (): string => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();
     }
-  } catch {}
+  } catch { }
   return Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 12);
 };
 
@@ -236,46 +238,132 @@ const getDocId = (date: string, uploadedBy?: string, uid?: string): string => {
 
 const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
   const sections = finalData.sections || [];
-  const unMinifiedWagons = (finalData.wagons || []).map((w: any) => ({
-    sequence: w.s ?? w.sequence ?? 0,
-    number: w.n ?? w.number ?? "",
-    operationCode: w.o ?? w.operationCode ?? "",
-    cargoWeight: w.w ?? w.cargoWeight ?? 0,
-    stationCode: w.st ?? w.stationCode ?? "",
-    cargoCode: w.c ?? w.cargoCode ?? "",
-    entryPointId: w.ep ?? w.entryPointId ?? null,
-    trainIndex: w.ti ?? w.trainIndex ?? "",
-    rawBlock: w.rb ?? (w.si !== undefined ? sections[w.si] : ""),
-    arrivalDate: w.ad || w.arrivalDate || undefined
-  }));
+  let flatWagons: any[] = [];
+
+  /**
+   * Process trains hierarchy — exposes ALL API fields to the UI.
+   * Each wagon gets train-level context (beginStationCode, endStationCode, numPoezd, numSostav)
+   * injected into it for convenient access by Dashboard components.
+   */
+  const processTrains = (trains: any[]) => {
+    (trains || []).forEach((t: any) => {
+      const tIdx = (t.trainIndex || t.ti || 'Unknown').toString().trim();
+
+      const trainWagons = (t.wagons || []).map((w: any) => ({
+        ...w, // <-- PRESERVE ALL ORIGINAL API FIELDS
+        // --- Core wagon identity ---
+        number:             w.wagonNum         ?? w.n   ?? w.number   ?? '',
+        wagonNum:           w.wagonNum         ?? w.n   ?? w.number   ?? '',
+        sequence:           w.index            ?? w.s   ?? w.sequence ?? 0,
+
+        // --- Cargo ---
+        cargoCode:          w.etsngCode        ?? w.c   ?? w.cargoId  ?? w.cargoCode ?? '',
+        etsngCode:          w.etsngCode        ?? w.c   ?? w.cargoCode ?? '',
+        cargoWeight:        Number(w.weight    ?? w.w   ?? w.cargoWeight ?? 0),
+        weight:             Number(w.weight    ?? w.w   ?? w.cargoWeight ?? 0),
+
+        // --- Receiving station (куда едет вагон) ---
+        stationCode:        w.receiveStationCode ?? w.st ?? w.stationCode ?? w.stationId ?? '',
+        receiveStationCode: w.receiveStationCode ?? w.st ?? '',
+        receiveStrana:      w.receiveStrana      ?? '',
+
+        // --- Sending station (откуда едет) ---
+        sendStationCode:    w.sendStationCode    ?? '',
+        sendStrana:         w.sendStrana         ?? '',
+
+        // --- Country of wagon registration ---
+        wagonStranaCode:    w.wagonStranaCode    ?? w.country ?? '',
+        country:            w.wagonStranaCode    ?? w.country ?? '',
+
+        // --- Train context (injected for convenience) ---
+        trainIndex:         tIdx,
+        numPoezd:           t.numPoezd           ?? '',
+        numSostav:          t.numSostav          ?? '',
+        beginStationCode:   t.beginStationCode   ?? '',
+        endStationCode:     t.endStationCode     ?? '',
+
+        // --- Legacy/frontend-only fields ---
+        operationCode:      w.status ?? w.o ?? w.operationCode ?? '',
+        entryPointId:       w.entryPointId ?? w.ep ?? null,
+        rawBlock:           w.rawBlock ?? w.rb ?? (w.sectionIndex !== undefined ? sections[w.sectionIndex] : w.si !== undefined ? sections[w.si] : ''),
+        arrivalDate:        w.arrivalDate ?? w.ad ?? undefined,
+      }));
+
+      flatWagons = flatWagons.concat(trainWagons);
+    });
+  };
+
+  if (finalData.trains && Array.isArray(finalData.trains) && finalData.trains.length > 0) {
+    // ✅ PRIMARY PATH: New schema Date -> Trains[] -> Wagons[]
+    processTrains(finalData.trains);
+  } else if (finalData.submissions && Array.isArray(finalData.submissions)) {
+    // Legacy support
+    finalData.submissions.forEach((sub: any) => {
+      if (sub.trains) processTrains(sub.trains);
+    });
+  } else if (finalData.wagons && Array.isArray(finalData.wagons)) {
+    // Flat wagon array (from flat fetch or old format)
+    flatWagons = finalData.wagons.map((w: any) => ({
+      ...w, // <-- PRESERVE ALL ORIGINAL API FIELDS
+      number:             w.wagonNum ?? w.n ?? w.number ?? '',
+      wagonNum:           w.wagonNum ?? w.n ?? w.number ?? '',
+      sequence:           w.index    ?? w.s ?? w.sequence ?? 0,
+      cargoCode:          w.etsngCode ?? w.c ?? w.cargoCode ?? '',
+      etsngCode:          w.etsngCode ?? w.c ?? '',
+      cargoWeight:        Number(w.weight ?? w.w ?? 0),
+      weight:             Number(w.weight ?? w.w ?? 0),
+      stationCode:        w.receiveStationCode ?? w.st ?? w.stationCode ?? '',
+      receiveStationCode: w.receiveStationCode ?? w.st ?? '',
+      receiveStrana:      w.receiveStrana ?? '',
+      sendStationCode:    w.sendStationCode ?? '',
+      sendStrana:         w.sendStrana ?? '',
+      wagonStranaCode:    w.wagonStranaCode ?? w.country ?? '',
+      country:            w.wagonStranaCode ?? w.country ?? '',
+      trainIndex:         w.trainIndex ?? w.ti ?? '',
+      numPoezd:           w.numPoezd ?? '',
+      numSostav:          w.numSostav ?? '',
+      beginStationCode:   w.beginStationCode ?? '',
+      endStationCode:     w.endStationCode ?? '',
+      operationCode:      w.status ?? w.o ?? w.operationCode ?? '',
+      entryPointId:       w.entryPointId ?? w.ep ?? null,
+      rawBlock:           w.rb ?? (w.si !== undefined ? sections[w.si] : ''),
+      arrivalDate:        w.ad || w.arrivalDate || undefined,
+    }));
+  }
+
   return {
-    date: finalData.date || cleanDate,
-    rawData: finalData.rawData || "",
-    wagons: unMinifiedWagons,
+    date:       finalData.date || cleanDate,
+    rawData:    finalData.rawData || '',
+    wagons:     flatWagons,
     sections,
-    stations: [],
-    timestamp: finalData.timestamp || Date.now(),
-    uploadedBy: finalData.uploadedBy
+    stations:   [],
+    timestamp:  finalData.timestamp || Date.now(),
+    uploadedBy: finalData.uploadedBy,
   };
 };
+
+
 
 export const getReportByDate = async (date: string, userContext?: AdminUser): Promise<DailyReport | null> => {
   const cleanDate = date.trim();
   const isUser = userContext?.role === 'user';
 
-  // --- Firestore fetch ---
   try {
     if (USE_LOCAL_BACKEND) {
-      // Local backend: fetch by date and filter client-side if needed
-      const res = await fetch(`${API_URL}/reports/${cleanDate}`);
+      // --- LOCAL BACKEND PATH (Always fetch fresh, no stale cache) ---
+      const url = `${API_URL}/reports/${cleanDate}`;
+      console.log(`[DB] Fetching: ${url}`);
+      const res = await fetch(url);
+
       if (res.ok) {
         const finalData = await res.json();
-        if (isUser && finalData.uploadedBy !== userContext!.username) return null;
         const report = unMinifyReport(cleanDate, finalData);
-        LS.saveReport(cleanDate, report);
         return report;
       }
+      // 404 or other error - no data for this date
+      return null;
     } else if (db) {
+
       if (isUser) {
         // Fetch user-scoped doc directly: prefer date__uid, fallback to date__username
         const userUid = userContext!.uid;
@@ -380,9 +468,8 @@ export const getReportDates = async (userContext?: AdminUser): Promise<string[]>
       if (res.ok) {
         const list = await res.json();
         list.forEach((item: any) => {
-          if (!isUser || item.uploadedBy === userContext!.username) {
-            dates.add(item.date);
-          }
+          // Local backend is global, no user filtering
+          dates.add(item.date);
         });
       }
     } else if (db) {
@@ -982,10 +1069,12 @@ export const saveDailyReport = async (
 
   try {
     if (USE_LOCAL_BACKEND) {
+      // --- SENIOR LOCAL SAVE: User-Agnostic Global Store ---
+      // 1. Fetch existing for merge (Clean architecture: stay idempotent)
       let existingData: any = {};
       try {
-        const res = await fetch(`${API_URL}/reports/${cleanDate}`);
-        if (res.ok) existingData = await res.json();
+        const currentRes = await fetch(`${API_URL}/reports/${cleanDate}`);
+        if (currentRes.ok) existingData = await currentRes.json();
       } catch (e) { }
 
       const mergedWagons = mergeWagons(existingData.wagons || [], minifiedNewWagons, existingData.sections || []);
@@ -996,7 +1085,7 @@ export const saveDailyReport = async (
         wagons: mergedWagons,
         sections: sectionPool,
         timestamp,
-        uploadedBy // Preserve newest uploadership
+        uploadedBy: 'System Local' // Static for local backend
       };
 
       const res = await fetch(`${API_URL}/reports/${cleanDate}`, {
@@ -1005,11 +1094,10 @@ export const saveDailyReport = async (
         body: safeStringify(mergedPayload)
       });
 
-      if (!res.ok) throw new Error("Local Server Error");
+      if (!res.ok) throw new Error(`Backend Error: ${res.status}`);
 
       backendSaved = true;
       finalReport = mergedPayload;
-
     } else if (db) {
       // Use composite doc ID for data isolation per user
       // Prefer uid-based key for immutability; fall back to username for legacy
@@ -1019,7 +1107,7 @@ export const saveDailyReport = async (
             const uSnap = await getDoc(doc(db, "admins", uploadedBy));
             if (uSnap.exists()) return uSnap.data()?.uid as string | undefined;
           }
-        } catch {}
+        } catch { }
         return undefined;
       })() : undefined;
       const docId = getDocId(cleanDate, uploadedBy, userUid);

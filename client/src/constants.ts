@@ -1,3 +1,10 @@
+import { MapPoint, MtuRegion } from './types';
+
+export const INITIAL_MAP_POINTS: MapPoint[] = [];
+
+export const INITIAL_MTU_REGIONS: MtuRegion[] = [];
+
+export const RAW_OPERATIONAL_DATA = ``;
 
 export const RAW_STATION_DATA = `
 720000 Чукурсай 73 1

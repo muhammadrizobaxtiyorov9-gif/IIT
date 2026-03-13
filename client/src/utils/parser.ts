@@ -1,7 +1,22 @@
 
 import { Station, Wagon, RegionName, Language, RouteVerification } from '../types';
-import stationDataJson from '../../public/data/station_data.json';
-import trainIndexData from '../../public/data/train_index_data.json';
+// Default to Vite's URL resolution if running without the backend server serving the static files
+// @ts-ignore
+import stationDataUrlFallback from '../../public/data/station_data.json?url';
+// @ts-ignore
+import trainIndexDataUrl from '../../public/data/train_index_data.json?url';
+
+// We must fetch these URLs at runtime instead of importing them synchronously
+let stationDataJson: any = null;
+let trainIndexData: any = null;
+
+export const loadStaticData = async () => {
+    if (!trainIndexData) {
+        const res = await fetch(trainIndexDataUrl);
+        trainIndexData = await res.json();
+    }
+    return { trainIndexData };
+};
 
 const TAJ_BEK_PREFIXES = new Set(["7473", "7474", "7475", "7476", "7477", "7478", "7479", "7480", "7481", "7483", "7484", "7485", "7486"]);
 const TAJ_KUD_PREFIXES = new Set(["7450", "7451", "7452", "7453", "7454", "7455", "7456", "7457", "7458", "7459", "7460", "7461", "7462", "7463", "7464", "7465", "7466", "7467", "7468", "7469", "7470", "7471", "7472", "7482", "7487", "7488", "7489", "9385", "9386"]);
@@ -86,9 +101,9 @@ const detectCountryAndRegion = (code: string, providedOtd?: number): { dor: numb
       else if (prefix3 >= 733 && prefix3 <= 734) otd = 5;
       else if (prefix3 >= 735 && prefix3 <= 736) otd = 6;
       else if (prefix3 >= 737 && prefix3 <= 739) otd = 4;
-      else otd = 4;
+      // Default OTD if unknown 73x prefix
     }
-    regionName = mapOtdToRegion(otd);
+    regionName = otd ? mapOtdToRegion(otd) : "Узбекистан (прочие)";
   }
   else if (prefix2 === 74) {
     // 740xxx - 744xxx are Kokand (Uzbekistan)
@@ -338,54 +353,27 @@ export const groupDataByDate = (fullText: string): Record<string, string> => {
   return result;
 };
 
-export const parseStationData = (rawData: string): Station[] => {
-  const lines = rawData.trim().split('\n');
+export const loadStationDataAsync = async (): Promise<Station[]> => {
   const stations: Station[] = [];
-
-  const regex = /^(\d+)\s+(.+?)\s+(\d{2})(?:\s+(\d+))?.*$/;
-
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (!trimmed || (trimmed.length < 5) || /^(KOD|CODE)/i.test(trimmed)) continue;
-
-    const match = trimmed.match(regex);
-    if (match) {
-      const fullCode = match[1];
-      const name = match[2].trim();
-      let dor = parseInt(match[3], 10); // Extracted from file
-      let otd = match[4] ? parseInt(match[4], 10) : undefined;
-
-      const detection = detectCountryAndRegion(fullCode, otd);
-      dor = detection.dor || dor; // Use calculated or fallback to file dor
-      otd = detection.otd || otd;
-      const regionName = detection.regionName;
-
-      let id = fullCode;
-      if (dor === 73) {
-        id = fullCode.length >= 5 ? fullCode.substring(0, 5) : fullCode;
-      }
-
-      const isBorderPoint = name.toLowerCase().includes('(эксп)') || name.toLowerCase().includes('стык');
-
-      stations.push({
-        id,
-        fullCode,
-        name,
-        dor,
-        otd,
-        regionName,
-        isBorderPoint
-      });
-    }
-  }
-
-  // Merge JSON data
   try {
+    const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000/api';
+    const res = await fetch(`${API_BASE}/station-data`);
+    
+    if (!res.ok) {
+       console.warn(`Failed to fetch /api/station-data, status: ${res.status}. Falling back to static URL.`);
+       const fallbackRes = await fetch(stationDataUrlFallback);
+       stationDataJson = await fallbackRes.json();
+    } else {
+       stationDataJson = await res.json();
+    }
+
     const extraStations = stationDataJson as any[];
     for (const item of extraStations) {
-      const fullCode = item.code;
-      const name = item.station_name;
-      const isBorderPoint = item.isBorderPoint;
+      if (!item.code || !item.station_name) continue; // Skip malformed rows
+      
+      const fullCode = item.code.trim();
+      const name = item.station_name.trim();
+      const isBorderPoint = !!item.isBorderPoint;
 
       let dor = typeof item.dor === 'number' ? item.dor : undefined;
       const explicitOtd = typeof item.otd === 'number' ? item.otd : undefined;
@@ -394,7 +382,7 @@ export const parseStationData = (rawData: string): Station[] => {
       // Extract OTD/MTU regions via code prefixes, respecting JSON OTD
       const detection = detectCountryAndRegion(fullCode, explicitOtd);
       dor = dor !== undefined ? dor : detection.dor;
-      const otd = detection.otd;
+      const otd = detection.otd || explicitOtd;
 
       // Prefer explicit country, but override with detailed MTU region for Uzbekistan
       let regionName = country || detection.regionName;
@@ -442,11 +430,19 @@ type StationMap = Map<string, Station>;
 export const createStationMap = (stations: Station[]): StationMap => {
   const map = new Map<string, Station>();
 
-  // First pass: exact matches and standard IDs
+  // First pass: exact matches
   for (const s of stations) {
-    map.set(s.fullCode, s);
+    if (!map.has(s.fullCode)) {
+      map.set(s.fullCode, s);
+    }
+  }
+
+  // Second pass: standard IDs (truncations) - only if they don't overwrite a true exact match
+  for (const s of stations) {
     if (s.id !== s.fullCode) {
-      map.set(s.id, s);
+      if (!map.has(s.id) || map.get(s.id)?.fullCode !== s.id) {
+        map.set(s.id, s);
+      }
     }
   }
 
@@ -460,12 +456,11 @@ export const createStationMap = (stations: Station[]): StationMap => {
       }
     }
 
-    if (s.fullCode.length === 6) {
+    if (s.fullCode.length >= 5) {
+      // API now sends exactly 5 digits, or we extract the first 5 digits from a 6 digit code.
+      // We do NOT drop the 5th digit anymore.
       const standardKey = s.fullCode.substring(0, 5);
       if (!map.has(standardKey)) map.set(standardKey, s);
-
-      const specialKey = s.fullCode.substring(0, 4) + s.fullCode[5];
-      if (!map.has(specialKey)) map.set(specialKey, s);
     }
   }
 
@@ -475,18 +470,19 @@ export const createStationMap = (stations: Station[]): StationMap => {
 const findStationFast = (code: string, stationMap: StationMap, stationsArr?: Station[]): Station | undefined => {
   if (!code) return undefined;
 
-  // 1. Exact match
+  // 1. Exact match (6 chars, 5 chars, etc)
   const exact = stationMap.get(code);
   if (exact) return exact;
 
-  // 2. If 6 digits, try 5 digits
+  // 2. If 6 digits, try strict 5 digits (drop the 6th check digit)
   if (code.length === 6) {
     const prefix5 = code.substring(0, 5);
     const match5 = stationMap.get(prefix5);
     if (match5) return match5;
   }
-
-  // 3. Try 4-digit prefix match (Senior logic: check first 4 digits)
+  
+  // 3. If we received 5 digits directly, it should have been caught by 'exact' above.
+  // But just in case, we do the same fallback to 4 digits for legacy support.
   if (code.length >= 4) {
     const prefix4 = code.substring(0, 4);
     const match4 = stationMap.get(prefix4);
@@ -1047,7 +1043,8 @@ export const rehydrateWagons = (wagons: any[], stations: Station[], sections: st
   const stationMap = createStationMap(stations);
 
   return wagons.map(w => {
-    const stCode = w.stationCode || w.st || "";
+    // API data uses receiveStationCode, while manual/local uses stationCode or st
+    const stCode = w.receiveStationCode || w.stationCode || w.st || "";
     const matchedStation = findStationFast(stCode, stationMap, stations) || inferStation(stCode);
 
     let entryPoint: Station | undefined = undefined;
@@ -1058,12 +1055,13 @@ export const rehydrateWagons = (wagons: any[], stations: Station[], sections: st
     }
 
     return {
-      sequence: w.sequence || w.s || 0,
-      number: w.number || w.n || "",
-      operationCode: w.operationCode || w.o || "",
-      cargoWeight: w.cargoWeight || w.w || 0,
-      stationCode: stCode,
-      cargoCode: w.cargoCode || w.c || "",
+      ...w, // <-- PRESERVE ALL ORIGINAL API FIELDS
+      sequence: w.sequence || w.index || w.s || 0,
+      number: w.number || w.wagonNum || w.n || "",
+      operationCode: w.operationCode || w.status || w.o || "",
+      cargoWeight: w.cargoWeight || w.weight || w.w || 0,
+      stationCode: stCode || w.receiveStationCode || "",
+      cargoCode: w.cargoCode || w.etsngCode || w.c || "",
       destinationStation: matchedStation.name,
       matchedStation,
       entryPoint,

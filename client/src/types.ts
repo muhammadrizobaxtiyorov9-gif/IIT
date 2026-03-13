@@ -60,6 +60,7 @@ export interface Wagon {
   reportDate?: string; // Injected YYYY-MM-DD from the DB (respecting 18:00 rule)
   rawBlock?: string; // Original raw text block for this train
   routeVerification?: RouteVerification; // Advanced AI/Parser analytics
+  [key: string]: any; // Allow all raw API fields
 }
 
 // --- CALENDAR TYPES ---

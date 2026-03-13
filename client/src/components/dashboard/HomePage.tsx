@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Wagon, MapPoint, MtuRegion, Language } from '../../types';
 import { normalizeMgspName } from '../../utils/stationUtils';
@@ -392,7 +392,7 @@ const HomePage: React.FC<Props> = ({ wagons, mapPoints, mtuRegions, lang, t }) =
 
           <div className="h-32 w-full relative">
             {pointStats.total > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie data={pointStats.chartData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={4} dataKey="value" stroke="none">
                     {pointStats.chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index]} />)}

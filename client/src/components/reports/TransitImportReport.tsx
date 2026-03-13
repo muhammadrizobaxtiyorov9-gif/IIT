@@ -1,4 +1,4 @@
-﻿
+
 import React, { useMemo, useState } from 'react';
 import { Wagon, Station, ReportCell, Language } from '../../types';
 import { FileText, X, Printer, LayoutGrid, Table, ArrowDownRight, ArrowUpRight, ShieldCheck, Info, Download, AlertTriangle } from 'lucide-react';
@@ -727,7 +727,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {t('transit_entry_chart')}
             </h4>
             <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie
                     data={transitEntryPieData}
@@ -764,7 +764,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {t('transit_exit_chart')}
             </h4>
             <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie
                     data={transitExitPieData}
@@ -801,7 +801,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {t('import_entry_chart')}
             </h4>
             <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie
                     data={importEntryPieData}
@@ -838,7 +838,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {t('import_region_chart')}
             </h4>
             <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie
                     data={rjuPieData}

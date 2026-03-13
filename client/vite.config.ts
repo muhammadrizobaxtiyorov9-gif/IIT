@@ -12,6 +12,12 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:3000',
           changeOrigin: true
+        },
+        '/railway-api': {
+          target: 'https://e-nakl.railway.uz/public/api',
+          changeOrigin: true,
+          secure: false, // Bypass SSL cert errors if any
+          rewrite: (path) => path.replace(/^\/railway-api/, '')
         }
       }
     },

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Wagon, Station, Language } from '../../types';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -436,7 +436,7 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
 
                                 {currentViewData.length > 0 ? (
                                     <div className="flex-1 w-full min-h-[400px]">
-                                        <ResponsiveContainer width="100%" height="100%">
+                                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                                             <BarChart data={currentViewData} margin={{ top: 30, right: 30, left: -20, bottom: 40 }} barCategoryGap="20%">
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 13, fontWeight: 800, fill: '#64748b' }} dy={15} />
@@ -494,7 +494,7 @@ const TrainInfographics: React.FC<TrainInfographicsProps> = ({ wagons, stations,
 
                             {dynamicsData.length > 0 && dynamicsUniqueDests.length > 0 ? (
                                 <div className="flex-1 w-full relative">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                                         <AreaChart data={dynamicsData} margin={{ top: 20, right: 30, left: -20, bottom: 40 }}>
                                             <defs>
                                                 {dynamicsUniqueDests.map((dest, i) => (
