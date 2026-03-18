@@ -326,22 +326,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingStatus, setLoadingStatus] = useState<string>('Загрузка станций...');
 
-  // Async station loader (Hydrates 22,000+ stations)
-  useEffect(() => {
-    const fetchStations = async () => {
-      try {
-        const loadedStations = await loadStationDataAsync();
-        setStations(loadedStations);
-        console.log(`Loaded ${loadedStations.length} railway stations.`);
-      } catch (err) {
-        console.error("Failed to load railway stations on mount", err);
-      } finally {
-        setLoading(false);
-        setLoadingStatus('Загрузка...');
-      }
-    };
-    fetchStations();
-  }, []);
+  // Stations are loaded via initApp() on mount to ensure sequencing instead of a standalone useEffect
 
   // Load last active tab from F5 persistence
   const [activeTab, setActiveTab] = useState<'home' | 'dashboard' | 'input' | 'admin' | 'logs'>(() => {
@@ -467,6 +452,17 @@ const App: React.FC = () => {
           }
         });
 
+        // 1. Force strict sequential loading: Load Stations First
+        setLoadingStatus('Загрузка станций...');
+        let loadedStations: Station[] = [];
+        try {
+          loadedStations = await loadStationDataAsync();
+          setStations(loadedStations);
+          console.log(`Loaded ${loadedStations.length} railway stations.`);
+        } catch (err) {
+          console.error("Failed to load railway stations", err);
+        }
+
         // If we have no cached dates, show the status briefly
         if (availableDates.size === 0) {
           setLoadingStatus(t('sync_archive'));
@@ -475,8 +471,8 @@ const App: React.FC = () => {
         // Fire metadata sync in background (non-blocking)
         refreshAvailableDates();
 
-        // Only block the UI loader on fetching the actual report payload for the current view
-        await loadDataForRange(dateRange);
+        // 2. Load the actual report payload ONLY AFTER stations are available in memory
+        await loadDataForRange(dateRange, loadedStations);
       } catch (e) {
         logger.error('App Initialization Failed', e);
         setLoadingStatus("Tizimda xatolik yuz berdi");
@@ -568,7 +564,7 @@ const App: React.FC = () => {
       }
       
       // Reload data from DB after successful sync
-      await loadDataForRange(dateRange);
+      await loadDataForRange(dateRange, stations);
       
     } catch (error) {
       console.error('API sync failed:', error);
@@ -578,7 +574,7 @@ const App: React.FC = () => {
     }
   };
 
-  const loadDataForRange = async (range: DateRange) => {
+  const loadDataForRange = async (range: DateRange, explicitStations?: Station[]) => {
     setLoading(true);
     setLoadingStatus(t('getting_data'));
     try {
@@ -588,6 +584,9 @@ const App: React.FC = () => {
       // Fetch reports for range
       const reports = await getReportsInRange(range.startDate, range.endDate, currentUser || undefined);
 
+      // Use explicitly provided stations instantly to avoid React state closure empty arrays, otherwise fallback to state
+      const stationsList = explicitStations && explicitStations.length > 0 ? explicitStations : stations;
+
       if (reports.length > 0) {
         // Sort reports by date ascending to ensure latest status overrides previous
         reports.sort((a, b) => a.date.localeCompare(b.date));
@@ -595,7 +594,7 @@ const App: React.FC = () => {
         reports.forEach(r => {
           combinedRawData += `\n--- [${r.date}] ---\n` + (r.rawData || "");
           if (r.wagons) {
-            const rehydrated = rehydrateWagons(r.wagons, stations, r.sections || []);
+            const rehydrated = rehydrateWagons(r.wagons, stationsList, r.sections || []);
             rehydrated.forEach(w => {
               w.reportDate = r.date; // Inject DB reporting date (18:00 cutoff)
               // Preserve all wagons without deduplicating by wagon number
@@ -622,7 +621,7 @@ const App: React.FC = () => {
 
   const handleRangeSelect = async (newRange: DateRange) => {
     setDateRange(newRange);
-    await loadDataForRange(newRange);
+    await loadDataForRange(newRange, stations);
   };
 
   const runParserAsync = async (rawData: string): Promise<{ wagons: Wagon[], errors: string[] }> => {

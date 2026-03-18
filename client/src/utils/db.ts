@@ -284,7 +284,7 @@ const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
 
         // --- Legacy/frontend-only fields ---
         operationCode:      w.status ?? w.o ?? w.operationCode ?? '',
-        entryPointId:       w.entryPointId ?? w.ep ?? null,
+        entryPointId:       w.borderStationCode ?? t.borderStationCode ?? w.entryPointId ?? w.ep ?? null,
         rawBlock:           w.rawBlock ?? w.rb ?? (w.sectionIndex !== undefined ? sections[w.sectionIndex] : w.si !== undefined ? sections[w.si] : ''),
         arrivalDate:        w.arrivalDate ?? w.ad ?? undefined,
       }));
@@ -325,7 +325,7 @@ const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
       beginStationCode:   w.beginStationCode ?? '',
       endStationCode:     w.endStationCode ?? '',
       operationCode:      w.status ?? w.o ?? w.operationCode ?? '',
-      entryPointId:       w.entryPointId ?? w.ep ?? null,
+      entryPointId:       w.borderStationCode ?? w.entryPointId ?? w.ep ?? null,
       rawBlock:           w.rb ?? (w.si !== undefined ? sections[w.si] : ''),
       arrivalDate:        w.ad || w.arrivalDate || undefined,
     }));
