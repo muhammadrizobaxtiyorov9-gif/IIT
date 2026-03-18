@@ -10,7 +10,8 @@ import connectDB from './config/db';
 import authRoutes from './routes/authRoutes';
 import reportRoutes from './routes/reportRoutes';
 import logRoutes from './routes/logRoutes';
-import integrationRoutes from './routes/integrationRoutes'; // ADDED
+import integrationRoutes from './routes/integrationRoutes.js';
+import settingsRoutes from './routes/settingsRoutes.js'; // Modular settings router
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -34,8 +35,9 @@ async function startServer() {
   app.use('/api/reports', reportRoutes);
   app.use('/api/logs', logRoutes);
   app.use('/api/integration', integrationRoutes); // ADDED
+  app.use('/api/settings', settingsRoutes);       // ADDED (Modular Refactoring)
 
-  // --- STATIC JSON ROUTES (For huge fixed datasets) ---
+  // --- STATIC FILE ROUTES (For huge fixed datasets) ---
   
   // 1. Upload Station Data (Admin tool saves raw JSON back to disk)
   app.post('/api/admin/upload-stations', async (req, res) => {
@@ -65,31 +67,6 @@ async function startServer() {
       }
     } else {
       res.json([]);
-    }
-  });
-
-  // 3. Mock App Settings API (Saves Map Settings to prevent 404 flooding)
-  const SETTINGS_FILE = path.join(__dirname, '../client/public/data/map_settings.json');
-  
-  app.get('/api/settings', async (req, res) => {
-    try {
-      if (fs.existsSync(SETTINGS_FILE)) {
-        const data = await fs.promises.readFile(SETTINGS_FILE, 'utf8');
-        res.json(JSON.parse(data));
-      } else {
-        res.json({});
-      }
-    } catch {
-      res.json({});
-    }
-  });
-
-  app.post('/api/settings', async (req, res) => {
-    try {
-      await fs.promises.writeFile(SETTINGS_FILE, JSON.stringify(req.body, null, 2));
-      res.json({ success: true });
-    } catch {
-      res.status(500).json({ error: 'Failed to write settings' });
     }
   });
 

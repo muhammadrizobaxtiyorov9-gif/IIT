@@ -696,8 +696,14 @@ export const loadMapSettings = async (): Promise<AppSettings | undefined> => {
   let data: AppSettings | undefined = undefined;
   try {
     if (USE_LOCAL_BACKEND) {
+      console.log("Fetching map settings from local backend...");
       const res = await fetch(`${API_URL}/settings`);
-      if (res.ok) data = await res.json();
+      if (res.ok) {
+        data = await res.json();
+        console.log("Received map settings from backend:", data ? Object.keys(data) : "empty", "Points:", data?.mapPoints?.length);
+      } else {
+        console.error("Local backend settings fetch failed:", res.status);
+      }
     } else if (db) {
       const docSnap = await withTimeout(getDoc(doc(db, "settings", "map_config"))) as DocumentSnapshot<DocumentData>;
       if (docSnap.exists()) data = docSnap.data() as AppSettings;
