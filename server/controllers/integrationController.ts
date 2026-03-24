@@ -50,6 +50,7 @@ export const syncRailwayData = async (req: Request, res: Response) => {
             message:    `${date}: ${trains.length} poyezd, ${totalWagons} ta vagon saqlandi`,
             trainCount: trains.length,
             wagonCount: totalWagons,
+            rawApiData: rawApiData // Send raw data back to frontend for debugging
         });
 
     } catch (e: any) {

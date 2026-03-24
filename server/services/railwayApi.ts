@@ -64,6 +64,13 @@ export const fetchDu1Data = async (date: string): Promise<any> => {
 
         const count = response.data?.data?.length ?? 0;
         console.log(`[API] Received ${count} train blocks for ${date}`);
+        
+        // =======================================================================
+        // 🛠️ DEBUG TAVSIYASI: E-Nakl API dan kelayotgan JSON ni ko'rish uchun 
+        // pastdagi qatorni commentdan chiqaring:
+        // console.log("== RAW API RESPONSE ==\n", JSON.stringify(response.data, null, 2));
+        // =======================================================================
+
         return response.data;
     } catch (error: any) {
         console.error(`[API] Fetch error for ${date}:`, error.response?.data || error.message);
@@ -255,7 +262,9 @@ export const parseRailwayDataToTrains = (apiData: any): any[] => {
             });
             totalWagons += wagons.length;
         } else {
-            console.warn(`[Parser] Train #${trainIdx} (${trainIndex}) has no wagons array`);
+            // 🛠️ DEBUG: Agar API dan kelgan poyezd ma'lumotining ichida "wagons" bo'lmasa, uni console da ko'ramiz
+            console.warn(`[Parser] ⚠️ DIQQAT: API dan kelgan Train #${trainIdx} (${trainIndex}) da vagonlar ro'yxati yo'q (bo'sh)! Bu ehtimol UI dagi tafovutga sababchi bo'lishi mumkin.`);
+            // console.log("Bo'sh poyezd bloki:", JSON.stringify(trainBlock, null, 2));
         }
 
         // === TRAIN OBJECT — ALL API fields + derived fields ===
