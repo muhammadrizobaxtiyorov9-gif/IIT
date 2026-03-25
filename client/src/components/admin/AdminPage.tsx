@@ -677,44 +677,6 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
             </div>
             <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('nav_admin')}</h2>
           </div>
-          <p className="text-xs text-slate-500 font-medium ml-12 mb-3">{t('hello')}, {currentUser}</p>
-          
-          <button
-            onClick={async () => {
-              try {
-                // Fetch Token
-                const authRes = await fetch("/railway-api/Authenticate?ClientId=arm_kontora&ClientSecret=$arm_kontora$");
-                const tokenData = await authRes.json();
-                const token = tokenData.value.replace(/[\r\n\s]+/g, '');
-                
-                // Fetch Data (using a recent date)
-                const date = new Date().toISOString().split('T')[0];
-                const res = await fetch(`/railway-api/Du1/GetDu1ForInfrastructure?date=${date}`, {
-                  headers: { "Authorization": token, "Accept": "application/json" }
-                });
-                
-                const data = await res.json();
-                console.log("=== API PAYLOAD RECEIVED ===");
-                console.log(data);
-                
-                // Trigger download
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `api_payload_${date}.json`;
-                a.click();
-                
-                alert("API Payload yuklab olindi! (Console'ni ham tekshiring)");
-              } catch (e: any) {
-                alert("Xatolik: " + e.message);
-                console.error(e);
-              }
-            }}
-            className="w-full py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 hover:-translate-y-0.5 transition-all"
-          >
-            🔥 Test API Payload
-          </button>
         </div>
 
         {/* Global Action Bar (Only for Map Edits) */}
@@ -944,12 +906,22 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={initDeletePoint}
-                  className="w-full py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 border border-rose-100"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> {t('delete_this_point')}
-                </button>
+                <div className="flex flex-col gap-2 mt-2">
+                  <button
+                    onClick={handleSaveToDb}
+                    disabled={isSaving}
+                    className="w-full py-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border border-emerald-200"
+                  >
+                    {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {t('save_changes') || "Сохранить стык"}
+                  </button>
+                  <button
+                    onClick={initDeletePoint}
+                    className="w-full py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 border border-rose-100"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> {t('delete_this_point')}
+                  </button>
+                </div>
               </div>
             )}
 

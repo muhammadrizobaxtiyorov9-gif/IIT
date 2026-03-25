@@ -380,7 +380,6 @@ const App: React.FC = () => {
   const [viewableRawData, setViewableRawData] = useState<string>("");
   const [isRawModalOpen, setIsRawModalOpen] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [apiSyncRawData, setApiSyncRawData] = useState<any>(null);
 
   const [mapPoints, setMapPoints] = useState<MapPoint[]>(INITIAL_MAP_POINTS);
   const [mtuRegions, setMtuRegions] = useState<MtuRegion[]>(INITIAL_MTU_REGIONS);
@@ -558,9 +557,6 @@ const App: React.FC = () => {
         }
         const report = await r.json();
         console.log("Local backenddan kelgan ma'lumot:", report);
-        if (report.rawApiData) {
-            setApiSyncRawData(report.rawApiData);
-        }
         toast.success('Маълумотлар API дан муваффақиятли янгиланди!', { id: toastId });
       } catch (err: any) {
         toast.error(`Хатолик: ${err?.message || 'Синхронизацияда хатолик'}`, { id: toastId });
@@ -1413,55 +1409,6 @@ const App: React.FC = () => {
       </main>
 
       {/* Modals */}
-      {apiSyncRawData && (
-         <div
-            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xl animate-in fade-in duration-200"
-            onClick={() => setApiSyncRawData(null)}
-         >
-            <div
-               className="bg-white rounded-3xl shadow-2xl w-full max-w-7xl flex flex-col h-[90vh] animate-in zoom-in-95 duration-300 border border-white/20"
-               onClick={(e) => e.stopPropagation()}
-            >
-               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-3xl">
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                     <Database className="w-5 h-5 text-emerald-500" />
-                     {lang === 'uz' ? "API'dan Kelgan Json Data (Postman bilan taqqoslash uchun)" : "JSON Data от API (Для сравнения с Postman)"}
-                  </h3>
-                  <button onClick={() => setApiSyncRawData(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                     <X className="w-5 h-5 text-slate-500" />
-                  </button>
-               </div>
-               <div className="p-4 bg-yellow-50 text-yellow-800 text-sm font-bold border-b border-yellow-200">
-                 {lang === 'uz' 
-                   ? `Ushbu oyna API'dan olingan xom ma'lumotlarni ko'rsatadi. Array uzunligi: ${apiSyncRawData.data ? apiSyncRawData.data.length : 'Noma\'lum'}` 
-                   : `Это окно показывает сырые данные из API. Длина массива: ${apiSyncRawData.data ? apiSyncRawData.data.length : 'Неизвестно'}`}
-               </div>
-               <div className="p-6 flex-1 overflow-auto bg-[#1e293b] custom-scrollbar">
-                  <pre className="font-mono text-xs text-green-400 leading-relaxed whitespace-pre-wrap font-medium">
-                     {JSON.stringify(apiSyncRawData, null, 2)}
-                  </pre>
-               </div>
-               <div className="p-6 border-t border-slate-100 bg-white rounded-b-3xl flex justify-end gap-3">
-                  <button
-                     onClick={() => {
-                        navigator.clipboard.writeText(JSON.stringify(apiSyncRawData, null, 2));
-                        toast.success(lang === 'uz' ? "Nusxa olindi" : "Скопировано");
-                     }}
-                     className="px-6 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all flex items-center gap-2"
-                  >
-                     <Copy className="w-4 h-4" />
-                     {lang === 'uz' ? "Nusxa olish" : "Копировать"}
-                  </button>
-                  <button
-                     onClick={() => setApiSyncRawData(null)}
-                     className="px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 active:scale-95"
-                  >
-                     Yopish
-                  </button>
-               </div>
-            </div>
-         </div>
-      )}
 
       {currentUser && (
         <UserProfileModal

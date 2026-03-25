@@ -24,8 +24,8 @@ async function startServer() {
 
   // Middleware
   app.use(cors());
-  app.use(bodyParser.json({ limit: '50mb' }));
-  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // Static Data paths
   const STATION_DATA_FILE = path.join(__dirname, '../client/public/data/station_data.json');

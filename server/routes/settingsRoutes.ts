@@ -13,12 +13,9 @@ const router = express.Router();
  */
 router.get('/', async (req, res) => {
   try {
-    console.log("\n--- GET /api/settings ---");
-
     // PRIORITY 1: Flat document — this is already exactly what the frontend needs
     const flatDoc = await Settings.findOne({ mapPoints: { $exists: true } }).lean();
     if (flatDoc?.mapPoints) {
-      console.log(`[Settings] Flat doc found. mapPoints: ${(flatDoc.mapPoints as any[]).length}, mtuRegions: ${(flatDoc.mtuRegions as any[] || []).length}`);
       return res.json({
         id: flatDoc.id || "map_config",
         mapPoints: flatDoc.mapPoints,
@@ -30,7 +27,6 @@ router.get('/', async (req, res) => {
     const nestedDoc = await Settings.findOne({ 'settings.map_config': { $exists: true } }).lean();
     if (nestedDoc?.settings?.map_config) {
       const mc = (nestedDoc.settings as any).map_config;
-      console.log(`[Settings] Firebase nested doc found. mapPoints: ${mc.mapPoints?.length || 0}`);
       return res.json({
         id: mc.id || "map_config",
         mapPoints: mc.mapPoints || [],
@@ -42,7 +38,6 @@ router.get('/', async (req, res) => {
     const topDoc = await Settings.findOne({ map_config: { $exists: true } }).lean();
     if (topDoc?.map_config) {
       const mc = topDoc.map_config as any;
-      console.log(`[Settings] Top-level map_config found. mapPoints: ${mc.mapPoints?.length || 0}`);
       return res.json({
         id: mc.id || "map_config",
         mapPoints: mc.mapPoints || [],
@@ -65,7 +60,10 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { mapPoints, mtuRegions } = req.body;
+    const { mapPoints, mtuRegions } = req.body || {};
+    if (!mapPoints || !mtuRegions) {
+      return res.status(400).json({ error: 'mapPoints and mtuRegions are required' });
+    }
     await Settings.findOneAndUpdate(
       { id: 'map_config' },
       { $set: { id: 'map_config', mapPoints, mtuRegions } },

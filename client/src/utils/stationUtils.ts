@@ -15,16 +15,17 @@ export const MGSP_DEFINITIONS: MgspDefinition[] = [
   { name: "КИРГИЗИЯ", codes: ['71810', '71820', '7181', '7182', '7116', '7166', '71'] },
   { name: "ХОДЖИДАВЛЕТ", codes: ['73080', '7308', '7307', '7514'] },
   { name: "ТАЛИМАРДЖАН", codes: ['75930', '7593', '7527', '7528'] },
-  { name: "РАЗЪЕЗД 161", codes: ['74990', '7499', '161'] },
+  { name: "РАЗЪЕЗД 161", codes: ['74991', '7499', '161', '734713', '73471'] },
   { name: "КУДУКЛИ", codes: ['73620', '7362', '7361', '7450'] },
   { name: "АМУЗАНГ", codes: ['73650', '73660', '7365', '7366'] },
   { name: "ГАЛАБА", codes: ['73640', '73630', '7364', '7363', '7496'] },
   { name: "ТАХИАТАШ", codes: ['73890', '7389'] },
-  { name: "КАРАКАЛПАКСТАН", codes: ['73690', '7369', '7370'] }
+  { name: "КАРАКАЛПАКСТАН", codes: ['73690', '7369', '7370'] },
+  { name: "АМЫДЕРЯ", codes: ['74912', '7491'] }
 ];
 
 export const normalizeMgspName = (station?: Station, trainIndex?: string): string => {
-  // PRIORITY 1: Check ACTUAL Train Protocol Index from trainProtocols.ts
+  // PRIORITY 1: Check ACTUAL Train Protocol Index from trainProtocols.ts (Primary source of truth per user)
   if (trainIndex) {
     const protocol = identifyTrainProtocol(trainIndex);
     if (protocol) {
@@ -32,7 +33,7 @@ export const normalizeMgspName = (station?: Station, trainIndex?: string): strin
     }
   }
 
-  // PRIORITY 2: Explicit Station Object Match (FROM CППB)
+  // PRIORITY 2: Explicit Station Object Match (Fallback to finding API borderStationCode or CППB inside MGSP_DEFINITIONS)
   if (station) {
     const code = station.fullCode || station.id;
     const nameUpper = station.name.toUpperCase();

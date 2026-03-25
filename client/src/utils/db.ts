@@ -725,10 +725,8 @@ export const subscribeToSettings = (onUpdate: (settings: AppSettings) => void): 
   const unsubscribeLocal = subscribeToLocalChanges('settings', refresh);
 
   refresh();
-  const interval = setInterval(refresh, 5000);
-  const unsubscribeRemote = () => clearInterval(interval);
 
-  return () => { unsubscribeLocal(); unsubscribeRemote(); };
+  return () => { unsubscribeLocal(); };
 };
 
 const DEFAULT_ADMIN: AdminUser = { username: 'admin', role: 'superadmin', name: 'Super Admin', addedAt: Date.now(), deviceInfo: 'System', lastLogin: Date.now() };
