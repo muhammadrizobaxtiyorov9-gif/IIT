@@ -8,6 +8,29 @@ export interface ProtocolRule {
   topshirishRules: Set<string>; // Topshirish (Chiqish)
 }
 
+export type CustomProtocolType = 'qabul' | 'topshirish';
+
+export interface CustomProtocolRule {
+  id: string; // Identifier for deletion
+  index: string; // Format e.g. "7200-6980"
+  type: CustomProtocolType;
+  mgsp: string; // Target Station
+}
+
+export const getCustomProtocols = (): CustomProtocolRule[] => {
+  try {
+    const raw = localStorage.getItem('custom_train_protocols');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error("Failed to parse custom protocols", e);
+  }
+  return [];
+};
+
+export const saveCustomProtocols = (protocols: CustomProtocolRule[]) => {
+  localStorage.setItem('custom_train_protocols', JSON.stringify(protocols));
+};
+
 // Yordamchi funksiya: Indeks oralig'ini yaratish (agar kerak bo'lsa) yoki ro'yxatni shakllantirish
 const createSet = (codes: string[]) => new Set(codes);
 
@@ -123,15 +146,23 @@ export const TRAIN_PROTOCOL_RULES: Record<string, ProtocolRule> = {
  */
 export const identifyTrainProtocol = (fullIndex: string): { mgsp: string, type: 'qabul' | 'topshirish' } | null => {
   // Indeksdan raqamlarni ajratib olish (Format: 6980-05-7200 yoki (6980+05+7200))
-  // O'rtadagi raqamni hisobga olmay, 1chi va 3chi raqamlarni ajratamiz
-  const match = fullIndex.match(/\(?\s*(\d{4})\s*[-+]\s*\d+\s*[-+]\s*(\d{4})\s*\)?/);
+  // O'rtadagi raqamni hisobga olmay, 1chi va 3chi raqamlarni ajratamiz (5-6 xonali API uchun qo'llab quvvatlash)
+  const match = fullIndex.match(/\(?\s*(\d{4,6})\s*[-+]\s*\d+\s*[-+]\s*(\d{4,6})\s*\)?/);
 
   if (!match) return null;
 
-  const fromCode = match[1];
-  const toCode = match[2];
+  const fromCode = match[1].substring(0, 4);
+  const toCode = match[2].substring(0, 4);
   const key = `${fromCode}-${toCode}`;
 
+  // 1. Dynamic check for Client-Side testing rules (HIGHEST PRIORITY)
+  const customRules = getCustomProtocols();
+  const matchedCustom = customRules.find(r => r.index === key);
+  if (matchedCustom) {
+      return { mgsp: matchedCustom.mgsp, type: matchedCustom.type };
+  }
+
+  // 2. Static strict fallback mapping definition rules
   for (const [mgsp, rules] of Object.entries(TRAIN_PROTOCOL_RULES)) {
     if ((rules as any).qabulRules.has(key)) {
       return { mgsp: rules.stationName, type: 'qabul' };

@@ -6,8 +6,9 @@ import { PieChart, Pie, Cell as RechartsCell, ResponsiveContainer, Tooltip as Re
 import { identifyTrainProtocol } from '../../utils/trainProtocols';
 import { MGSP_DEFINITIONS, normalizeMgspName } from '../../utils/stationUtils';
 import WagonListModal from '../shared/WagonListModal';
+import ProtocolManagerModal from '../shared/ProtocolManagerModal';
 import * as XLSX from 'xlsx';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Settings } from 'lucide-react';
 
 interface Props {
   wagons: Wagon[];
@@ -144,6 +145,7 @@ const FlowCard: React.FC<{ title: string; transitData: TransitRow; importData: I
 
 const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate }) => {
   const [modalData, setModalData] = useState<{ title: string, subtitle: string, items: Wagon[] } | null>(null);
+  const [protocolModalOpen, setProtocolModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'visual'>('table');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -420,6 +422,11 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
         }
 
         if (targetCell) { addToCell(targetCell, w); addToCell(row.total, w); }
+        
+        // --- ADD TO HANDOVER (СДАЧА) ---
+        if (protocol && protocol.type === 'topshirish') {
+          addToCell(row.sdacha, w);
+        }
       }
     });
 
@@ -479,17 +486,17 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
   const rjuTotal = useMemo(() => rjuPieData.reduce((acc, curr) => acc + curr.value, 0), [rjuPieData]);
 
   const Cell = ({ data, onClickLabel, isTotal = false, isHeader = false }: { data: ExtendedCell, onClickLabel: string, isTotal?: boolean, isHeader?: boolean }) => {
-    if (!data) return <><td className="border-r border-slate-100"></td><td className="border-r border-slate-100"></td></>;
+    if (!data) return <><td className="border border-slate-300"></td><td className="border border-slate-300"></td></>;
     return (
       <>
         <td
-          className={`px-1 py-2 text-center border-r border-slate-100 text-xs tabular-nums transition-colors ${data.wagons > 0 ? 'cursor-pointer hover:bg-yellow-50 text-slate-900 font-bold' : 'text-slate-200'} ${isTotal ? 'bg-slate-50 font-extrabold' : ''} ${isHeader ? 'border-b-2 border-slate-300' : 'border-b border-slate-100'}`}
+          className={`px-1 py-2 text-center border text-xs tabular-nums transition-colors ${data.wagons > 0 ? 'cursor-pointer hover:bg-yellow-50 text-slate-900 font-bold' : 'text-slate-200'} ${isTotal ? 'bg-slate-50 font-extrabold' : ''} border-slate-300`}
           onClick={() => data.wagons > 0 && setModalData({ title: onClickLabel, subtitle: t('wagons'), items: data.items })}
         >
           {data.wagons || ''}
         </td>
         <td
-          className={`px-1 py-2 text-center border-r border-slate-100 text-[10px] tabular-nums transition-colors ${data.wagons > 0 ? 'cursor-pointer hover:bg-yellow-50 text-slate-500 font-medium' : 'text-slate-100'} ${isTotal ? 'bg-slate-50 font-bold' : ''} ${isHeader ? 'border-b-2 border-slate-300' : 'border-b border-slate-100'}`}
+          className={`px-1 py-2 text-center border text-[10px] tabular-nums transition-colors ${data.wagons > 0 ? 'cursor-pointer hover:bg-yellow-50 text-slate-500 font-medium' : 'text-slate-100'} ${isTotal ? 'bg-slate-50 font-bold' : ''} border-slate-300`}
           onClick={() => data.wagons > 0 && setModalData({ title: onClickLabel, subtitle: "Tonnaj", items: data.items })}
         >
           {data.tonnage > 0 ? data.tonnage : ''}
@@ -507,8 +514,9 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
   );
 
   return (
-    <div id="report-container" className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 printable-area">
+    <div id="report-container" className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 animate-in fade-in slide-in-from-bottom-4 duration-500 printable-area relative">
       {modalData && <WagonListModal title={modalData.title} subtitle={modalData.subtitle} items={modalData.items} onClose={() => setModalData(null)} t={t} lang={lang} />}
+      {protocolModalOpen && <ProtocolManagerModal onClose={() => setProtocolModalOpen(false)} lang={lang} t={t} />}
 
       <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div>
@@ -530,6 +538,13 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setProtocolModalOpen(true)}
+            className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-200 transition-colors print:hidden flex items-center gap-2"
+            title="Manage and test dynamic Train Protocols without code updates"
+          >
+            <Settings className="w-4 h-4" /> Manage Protocols
+          </button>
+          <button
             onClick={handleExportExcel}
             className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-emerald-700 transition-colors print:hidden flex items-center gap-2"
             title="Download as Excel Spreadsheet"
@@ -550,25 +565,25 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
       <div className={`${viewMode === 'table' ? 'block' : 'hidden print:block'} space-y-12`}>
         {/* Transit Table */}
         <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)]">
-          <table id="transit-table" className="w-full border-collapse bg-white">
+          <table id="transit-table" className="w-full border-collapse bg-white border-2 border-slate-300">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th rowSpan={2} className="px-2 py-3 w-12 text-[10px] uppercase font-bold tracking-wider border-r border-slate-700">№</th>
-                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold tracking-wider border-r border-slate-700 min-w-[150px]">{t('mgsp_input')}</th>
-                {[t('taj_bekabad'), t('taj_kudukli'), t('turkmenistan'), t('kazakhstan'), t('kyrgyzstan'), 'Галаба'].map(h => <th key={h} colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-slate-800 border-r border-slate-700 border-b border-slate-700">{h}</th>)}
-                <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-amber-600 border-r border-amber-700 border-b border-amber-700">{t('total_upper')}</th>
-                <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-700">{t('handover')}</th>
+                <th rowSpan={2} className="px-2 py-3 w-12 text-[10px] uppercase font-bold tracking-wider border border-slate-700">№</th>
+                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold tracking-wider border border-slate-700 min-w-[150px]">{t('mgsp_input')}</th>
+                {[t('taj_bekabad'), t('taj_kudukli'), t('turkmenistan'), t('kazakhstan'), t('kyrgyzstan'), 'Галаба'].map(h => <th key={h} colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-slate-800 border border-slate-700">{h}</th>)}
+                <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-amber-600 border border-amber-700">{t('total_upper')}</th>
+                <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold text-slate-400 border border-slate-700">{t('handover')}</th>
               </tr>
               <tr className="bg-slate-900 text-slate-400 text-[9px] text-center font-mono">
-                {[...Array(7)].map((_, i) => <React.Fragment key={i}><th className="px-1 py-1 border-r border-slate-700 bg-slate-800/50">{lang === 'uz' ? 'vag' : 'ваг'}</th><th className="px-1 py-1 border-r border-slate-700 bg-slate-800/50">tn</th></React.Fragment>)}
+                {[...Array(7)].map((_, i) => <React.Fragment key={i}><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">{lang === 'uz' ? 'vag' : 'ваг'}</th><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">tn</th></React.Fragment>)}
               </tr>
             </thead>
             <tbody className="text-sm">
               <HeaderRow title={t('dir1')} colorClass="text-rose-600" />
               {DIR1_ROWS.map((name, i) => (
                 <tr key={name} className="hover:bg-slate-50 transition-colors">
-                  <td className="text-center font-mono text-xs text-slate-400 border-r border-slate-100 bg-slate-50/50">{i + 1}</td>
-                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border-r border-slate-100">{name}</td>
+                  <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">{i + 1}</td>
+                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{name}</td>
                   <Cell data={processedData.transitRows[name].taj_bekabad} onClickLabel={`${name} - ${t('taj_bekabad')}`} />
                   <Cell data={processedData.transitRows[name].taj_kudukli} onClickLabel={`${name} - ${t('taj_kudukli')}`} />
                   <Cell data={processedData.transitRows[name].turkmenistan} onClickLabel={`${name} - ${t('turkmenistan')}`} />
@@ -581,7 +596,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               ))}
               {/* Subtotal 1 */}
               <tr className="bg-rose-50 border-t-2 border-rose-100">
-                <td colSpan={2} className="px-4 py-2 text-right font-bold text-rose-700 text-xs uppercase tracking-wider border-r border-rose-200">{t('total_upper')} 1:</td>
+                <td colSpan={2} className="px-4 py-2 text-right font-bold text-rose-700 text-xs uppercase tracking-wider border border-slate-300">{t('total_upper')} 1:</td>
                 <Cell data={processedData.transitSub1.taj_bekabad} onClickLabel="Total 1 - BEK" isTotal />
                 <Cell data={processedData.transitSub1.taj_kudukli} onClickLabel="Total 1 - KUD" isTotal />
                 <Cell data={processedData.transitSub1.turkmenistan} onClickLabel="Total 1" isTotal />
@@ -595,8 +610,8 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               <HeaderRow title={t('dir2')} colorClass="text-blue-600" />
               {DIR2_ROWS.map((name, i) => (
                 <tr key={name} className="hover:bg-slate-50 transition-colors">
-                  <td className="text-center font-mono text-xs text-slate-400 border-r border-slate-100 bg-slate-50/50">{i + 1}</td>
-                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border-r border-slate-100">{name}</td>
+                  <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">{i + 1}</td>
+                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{name}</td>
                   <Cell data={processedData.transitRows[name].taj_bekabad} onClickLabel={`${name} - ${t('taj_bekabad')}`} />
                   <Cell data={processedData.transitRows[name].taj_kudukli} onClickLabel={`${name} - ${t('taj_kudukli')}`} />
                   <Cell data={processedData.transitRows[name].turkmenistan} onClickLabel={`${name} - ${t('turkmenistan')}`} />
@@ -609,7 +624,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               ))}
               {/* Subtotal 2 */}
               <tr className="bg-blue-50 border-t-2 border-blue-100">
-                <td colSpan={2} className="px-4 py-2 text-right font-bold text-blue-700 text-xs uppercase tracking-wider border-r border-blue-200">{t('total_upper')} 2:</td>
+                <td colSpan={2} className="px-4 py-2 text-right font-bold text-blue-700 text-xs uppercase tracking-wider border border-slate-300">{t('total_upper')} 2:</td>
                 <Cell data={processedData.transitSub2.taj_bekabad} onClickLabel="Total 2 - BEK" isTotal />
                 <Cell data={processedData.transitSub2.taj_kudukli} onClickLabel="Total 2 - KUD" isTotal />
                 <Cell data={processedData.transitSub2.turkmenistan} onClickLabel="Total 2" isTotal />
@@ -625,8 +640,8 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
                 <>
                   <HeaderRow title={t('other_unknown')} colorClass="text-slate-500" />
                   <tr className="hover:bg-slate-50 transition-colors">
-                    <td className="text-center font-mono text-xs text-slate-400 border-r border-slate-100 bg-slate-50/50">?</td>
-                    <td className="px-4 py-2 font-bold text-slate-700 text-xs border-r border-slate-100">ПРОЧИЕ</td>
+                    <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">?</td>
+                    <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">ПРОЧИЕ</td>
                     <Cell data={processedData.transitRows["ПРОЧИЕ"].taj_bekabad} onClickLabel="ПРОЧИЕ - Тадж (Бек)" />
                     <Cell data={processedData.transitRows["ПРОЧИЕ"].taj_kudukli} onClickLabel="ПРОЧИЕ - Тадж (Куд)" />
                     <Cell data={processedData.transitRows["ПРОЧИЕ"].turkmenistan} onClickLabel="ПРОЧИЕ - Туркм" />
@@ -640,8 +655,8 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               )}
 
               {/* GRAND TOTAL */}
-              <tr className="bg-slate-900 text-white border-t-4 border-amber-500 font-bold">
-                <td colSpan={2} className="px-4 py-3 text-right text-xs uppercase tracking-widest border-r border-slate-700">{t('total_transit')}:</td>
+              <tr className="bg-slate-900 text-white font-bold">
+                <td colSpan={2} className="px-4 py-3 text-right text-xs uppercase tracking-widest border border-slate-700">{t('total_transit')}:</td>
                 <Cell data={processedData.transitGrand.taj_bekabad} onClickLabel="GRAND TOTAL" isTotal />
                 <Cell data={processedData.transitGrand.taj_kudukli} onClickLabel="GRAND TOTAL" isTotal />
                 <Cell data={processedData.transitGrand.turkmenistan} onClickLabel="GRAND TOTAL" isTotal />
@@ -660,23 +675,23 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
             <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest">{t('import_acceptance')}</h3>
           </div>
-          <table id="import-table" className="w-full border-collapse bg-white">
+          <table id="import-table" className="w-full border-collapse bg-white border-2 border-slate-300">
             <thead>
               <tr className="bg-slate-900 text-white text-center">
-                <th rowSpan={2} className="px-2 py-3 w-12 text-[10px] uppercase font-bold border-r border-slate-700">№</th>
-                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold border-r border-slate-700 min-w-[150px]">{t('mgsp_input')}</th>
-                {[1, 2, 3, 4, 5, 6].map(i => `${regionTerm} ${i}`).map(h => <th key={h} colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-slate-800 border-r border-slate-700 border-b border-slate-700">{h}</th>)}
-                <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-blue-600 border-r border-blue-700 border-b border-blue-700">{t('total_upper')}</th>
+                <th rowSpan={2} className="px-2 py-3 w-12 text-[10px] uppercase font-bold border border-slate-700">№</th>
+                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold border border-slate-700 min-w-[150px]">{t('mgsp_input')}</th>
+                {[1, 2, 3, 4, 5, 6].map(i => `${regionTerm} ${i}`).map(h => <th key={h} colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-slate-800 border border-slate-700">{h}</th>)}
+                <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-blue-600 border border-blue-700">{t('total_upper')}</th>
               </tr>
               <tr className="bg-slate-900 text-slate-400 text-[9px] text-center font-mono">
-                {[...Array(7)].map((_, i) => <React.Fragment key={i}><th className="px-1 py-1 border-r border-slate-700 bg-slate-800/50">{lang === 'uz' ? 'vag' : 'ваг'}</th><th className="px-1 py-1 border-r border-slate-700 bg-slate-800/50">tn</th></React.Fragment>)}
+                {[...Array(7)].map((_, i) => <React.Fragment key={i}><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">{lang === 'uz' ? 'vag' : 'ваг'}</th><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">tn</th></React.Fragment>)}
               </tr>
             </thead>
             <tbody>
               {[...DIR1_ROWS, ...DIR2_ROWS].map((name, i) => (
                 <tr key={name} className="hover:bg-slate-50 transition-colors">
-                  <td className="text-center font-mono text-xs text-slate-400 border-r border-slate-100 bg-slate-50/50">{i + 1}</td>
-                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border-r border-slate-100">{name}</td>
+                  <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">{i + 1}</td>
+                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{name}</td>
                   <Cell data={processedData.importRows[name].mtu1} onClickLabel={`${name} - ${regionTerm} 1`} />
                   <Cell data={processedData.importRows[name].mtu2} onClickLabel={`${name} - ${regionTerm} 2`} />
                   <Cell data={processedData.importRows[name].mtu3} onClickLabel={`${name} - ${regionTerm} 3`} />
@@ -689,8 +704,8 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {/* Other for Import */}
               {processedData.importRows["ПРОЧИЕ"].total.wagons > 0 && (
                 <tr className="hover:bg-slate-50 transition-colors border-t border-slate-200">
-                  <td className="text-center font-mono text-xs text-slate-400 border-r border-slate-100 bg-slate-50/50">?</td>
-                  <td className="px-4 py-2 font-bold text-slate-500 text-xs border-r border-slate-100">ПРОЧИЕ</td>
+                  <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">?</td>
+                  <td className="px-4 py-2 font-bold text-slate-500 text-xs border border-slate-300">ПРОЧИЕ</td>
                   <Cell data={processedData.importRows["ПРОЧИЕ"].mtu1} onClickLabel={`ПРОЧИЕ - ${regionTerm} 1`} />
                   <Cell data={processedData.importRows["ПРОЧИЕ"].mtu2} onClickLabel={`ПРОЧИЕ - ${regionTerm} 2`} />
                   <Cell data={processedData.importRows["ПРОЧИЕ"].mtu3} onClickLabel={`ПРОЧИЕ - ${regionTerm} 3`} />
@@ -701,8 +716,8 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
                 </tr>
               )}
 
-              <tr className="bg-slate-900 text-white border-t-4 border-blue-500 font-bold">
-                <td colSpan={2} className="px-4 py-3 text-right text-xs uppercase tracking-widest border-r border-slate-700">{t('total_import')}:</td>
+              <tr className="bg-slate-900 text-white font-bold">
+                <td colSpan={2} className="px-4 py-3 text-right text-xs uppercase tracking-widest border border-slate-700">{t('total_import')}:</td>
                 <Cell data={processedData.importGrand.mtu1} onClickLabel="GRAND TOTAL" isTotal />
                 <Cell data={processedData.importGrand.mtu2} onClickLabel="GRAND TOTAL" isTotal />
                 <Cell data={processedData.importGrand.mtu3} onClickLabel="GRAND TOTAL" isTotal />

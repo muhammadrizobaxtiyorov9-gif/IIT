@@ -339,6 +339,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
       center: [41.5, 64.5],
       zoom: 6,
       zoomControl: false,
+      worldCopyJump: true,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -412,7 +413,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
         validPoints.forEach((latlng, index) => {
           const vertexIcon = L.divIcon({
             className: 'vertex-marker',
-            html: `<div style="width: 12px; height: 12px; background: white; border: 2px solid ${region.color}; border-radius: 50%; cursor: move; box-shadow: 0 0 10px rgba(0,0,0,0.2);"></div>`,
+            html: `<div style="width: 12px; height: 12px; background: white; border: 2px solid ${region.color}; border-radius: 50%; cursor: move; box-shadow: 0 0 10px rgba(0,0,0,0.2); z-index: 9999; position: relative;"></div>`,
             iconSize: [12, 12],
             iconAnchor: [6, 6]
           });
@@ -465,7 +466,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
 
           const ghostIcon = L.divIcon({
             className: 'ghost-marker',
-            html: `<div style="width: 10px; height: 10px; background: ${region.color}; opacity: 0.5; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;"><span style="color:white; font-size: 8px; font-weight: bold;">+</span></div>`,
+            html: `<div style="width: 10px; height: 10px; background: ${region.color}; opacity: 0.5; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 9000; position: relative;"><span style="color:white; font-size: 8px; font-weight: bold;">+</span></div>`,
             iconSize: [10, 10],
             iconAnchor: [5, 5]
           });
@@ -497,7 +498,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
 
       const icon = L.divIcon({
         className: 'custom-admin-marker',
-        html: `<div style="background-color: ${isSelected ? '#2563eb' : '#475569'}; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3);"></div>`,
+        html: `<div style="background-color: ${isSelected ? '#2563eb' : '#475569'}; width: 14px; height: 14px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 5000; position: relative;"></div>`,
         iconSize: [14, 14],
         iconAnchor: [7, 7]
       });
@@ -517,7 +518,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ mapPoints, setMapPoints, mtuRegio
         const dragIcon = L.divIcon({
           className: 'drag-marker',
           html: `
-              <div class="relative flex flex-col items-center justify-end w-12 h-12 -mt-12">
+              <div class="relative flex flex-col items-center justify-end w-12 h-12 -mt-12 z-[9999] pointer-events-auto">
                  <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl border-4 border-white animate-bounce cursor-move">
                     <Move className="w-5 h-5 text-white" />
                  </div>

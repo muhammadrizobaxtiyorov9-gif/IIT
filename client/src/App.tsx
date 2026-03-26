@@ -556,7 +556,6 @@ const App: React.FC = () => {
             throw new Error(errText || 'Синхронизацияда хатолик yuz berdi');
         }
         const report = await r.json();
-        console.log("Local backenddan kelgan ma'lumot:", report);
         toast.success('Маълумотлар API дан муваффақиятли янгиланди!', { id: toastId });
       } catch (err: any) {
         toast.error(`Хатолик: ${err?.message || 'Синхронизацияда хатолик'}`, { id: toastId });

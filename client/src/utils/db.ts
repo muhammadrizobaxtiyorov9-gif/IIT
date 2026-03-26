@@ -281,6 +281,7 @@ const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
         numSostav:          t.numSostav          ?? '',
         beginStationCode:   t.beginStationCode   ?? '',
         endStationCode:     t.endStationCode     ?? '',
+        datearriveBorderStation: t.datearriveBorderStation ?? w.datearriveBorderStation ?? undefined,
 
         // --- Legacy/frontend-only fields ---
         operationCode:      w.status ?? w.o ?? w.operationCode ?? '',
@@ -324,6 +325,7 @@ const unMinifyReport = (cleanDate: string, finalData: any): DailyReport => {
       numSostav:          w.numSostav ?? '',
       beginStationCode:   w.beginStationCode ?? '',
       endStationCode:     w.endStationCode ?? '',
+      datearriveBorderStation: w.datearriveBorderStation ?? undefined,
       operationCode:      w.status ?? w.o ?? w.operationCode ?? '',
       entryPointId:       w.borderStationCode ?? w.entryPointId ?? w.ep ?? null,
       rawBlock:           w.rb ?? (w.si !== undefined ? sections[w.si] : ''),

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Wagon, RegionName, Language } from '../../types';
 import { getRegionName, getCargoNameTranslated } from '../../utils/translations';
 import { normalizeMgspName } from '../../utils/stationUtils';
@@ -44,7 +44,7 @@ const getTrainStats = (wagons: Wagon[], stations: Station[]) => {
 
       // Ensure arrivalDate is a Date object and handle potential string rehydration
       let wagonDate: Date | undefined = undefined;
-      const rawDate = w.arrivalDate || (w as any).ad;
+      const rawDate = w.datearriveBorderStation || w.arrivalDate || (w as any).ad;
       if (rawDate) {
          wagonDate = rawDate instanceof Date ? rawDate : new Date(rawDate);
          // Check if valid date
@@ -191,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
          }
          return true;
       });
-   }, [wagons, selectedRegion, debouncedSearch, lang, selectedTrains]);
+   }, [wagons, selectedRegion, selectedDestination, debouncedSearch, lang, selectedTrains]);
 
    // Pagination Logic
    const totalPages = Math.ceil(filteredWagons.length / ITEMS_PER_PAGE);
@@ -357,14 +357,11 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
          }
       });
 
-      console.log("Raw Blocks Extracted:", rawBlocks.size, Array.from(rawBlocks));
-
       if (rawBlocks.size > 0) {
          // Join unique blocks.
          return Array.from(rawBlocks).join('\n\n------------------------------------------\n\n');
       }
 
-      console.log("Falling back generated text...");
       // Fallback to generated text
       const sortedWagons = [...trainWagons].sort((a, b) => a.sequence - b.sequence);
       let text = `${trainIndex}\n\n`;
@@ -397,8 +394,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
 
                   {/* Toolbar: Filter & Actions */}
                   <div className="p-4 bg-white border-b border-slate-100 flex flex-wrap gap-4 justify-between items-center sticky top-0 z-10 shadow-sm">
-                     <div className="flex items-center gap-3 flex-1 min-w-[200px]">
-                        <div className="relative flex-1 max-w-[180px]">
+                     <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[200px]">
+                        <div className="relative flex-1 min-w-[140px] max-w-[180px]">
                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                            <select
                               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none"
@@ -413,7 +410,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                         </div>
 
-                        <div className="relative flex-1 max-w-[180px]">
+                        <div className="relative flex-1 min-w-[140px] max-w-[180px]">
                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                            <select
                               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none"
@@ -428,7 +425,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                         </div>
 
-                        <div className="relative flex-1 max-w-[200px] group">
+                        <div className="relative flex-1 min-w-[140px] max-w-[200px] group">
                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                            <input
                               type="text"

@@ -1,4 +1,4 @@
-﻿
+
 import React, { useMemo, useState } from 'react';
 import { Wagon, Language } from '../../types';
 import { X, ShieldCheck, Clock, MapPin, FileText, ChevronDown, ChevronUp } from 'lucide-react';
@@ -30,7 +30,8 @@ const WagonListModal: React.FC<Props> = ({ title, subtitle, items, onClose, t, l
     
     const groupArray = Array.from(g.entries()).map(([index, wagons]) => {
        const first = wagons[0];
-       const arrival = first.arrivalDate;
+       const rawArrival = first.datearriveBorderStation || first.arrivalDate;
+       const arrival = rawArrival ? new Date(rawArrival) : undefined;
        const rawBlock = first.rawBlock; // Get raw block from first wagon
        
        // Parse destination from index: (XXXX+XXX+YYYY) -> YYYY

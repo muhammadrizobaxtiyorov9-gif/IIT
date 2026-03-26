@@ -46,7 +46,8 @@ const HomePage: React.FC<Props> = ({ wagons, mapPoints, mtuRegions, lang, t }) =
       minZoom: 5,
       maxZoom: 12,
       zoomControl: false,
-      attributionControl: false
+      attributionControl: false,
+      worldCopyJump: true,
     });
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -126,7 +127,7 @@ const HomePage: React.FC<Props> = ({ wagons, mapPoints, mtuRegions, lang, t }) =
       const isSelected = selectedPoint?.id === point.id;
 
       const iconHtml = `
-        <div class="relative flex flex-col items-center justify-end w-10 h-10 group transition-all duration-300 z-50" style="transform-origin: bottom center;">
+        <div class="relative flex flex-col items-center justify-end w-10 h-10 group transition-all duration-300 z-[9999]" style="transform-origin: bottom center;">
           ${isSelected ? '<div class="absolute bottom-1 w-12 h-12 bg-blue-500 rounded-full opacity-30 animate-ping"></div>' : ''}
           <div class="relative flex items-center justify-center w-4 h-4 bg-white rounded-full shadow-lg border-[2px] ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-slate-800'} transition-colors z-20">
             <div class="w-1.5 h-1.5 ${isSelected ? 'bg-blue-600' : 'bg-slate-800'} rounded-full"></div>
