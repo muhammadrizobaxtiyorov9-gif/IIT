@@ -421,9 +421,16 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           targetCell = row.galaba;
         }
 
-        if (targetCell) { addToCell(targetCell, w); addToCell(row.total, w); }
+        // --- STRICT ALLOCATION BASED ON RULE TYPE ---
+        
+        // --- ADD TO TRANSIT (GEOGRAPHIC COLUMNS + ИТОГО) ---
+        // ONLY if protocol strictly identifies it as an Acceptance ('qabul') wagon
+        if (protocol && protocol.type === 'qabul') {
+          if (targetCell) { addToCell(targetCell, w); addToCell(row.total, w); }
+        }
         
         // --- ADD TO HANDOVER (СДАЧА) ---
+        // ONLY if protocol strictly identifies it as a Handover ('topshirish') wagon
         if (protocol && protocol.type === 'topshirish') {
           addToCell(row.sdacha, w);
         }
@@ -575,7 +582,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
                 <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold text-slate-400 border border-slate-700">{t('handover')}</th>
               </tr>
               <tr className="bg-slate-900 text-slate-400 text-[9px] text-center font-mono">
-                {[...Array(7)].map((_, i) => <React.Fragment key={i}><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">{lang === 'uz' ? 'vag' : 'ваг'}</th><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">tn</th></React.Fragment>)}
+                {[...Array(8)].map((_, i) => <React.Fragment key={i}><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">{lang === 'uz' ? 'vag' : 'ваг'}</th><th className="px-1 py-1 border border-slate-700 bg-slate-800/50">tn</th></React.Fragment>)}
               </tr>
             </thead>
             <tbody className="text-sm">

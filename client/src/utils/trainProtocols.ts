@@ -108,7 +108,7 @@ export const TRAIN_PROTOCOL_RULES: Record<string, ProtocolRule> = {
   "СУРХОНОБОД": { // Yangi stansiya
     stationName: "РАЗЪЕЗД 161", // Hujjatda "Сурхонобод" lekin UI dagi ID va nomi "РАЗЪЕЗД 161"
     qabulRules: createSet([
-      "7568-7351", "7568-7453", "7568-7458", "7498-7351", "7498-7458", "7498-7453", "7504-7453", "7497-7453", "7571-7453"
+      "7568-7351", "7568-7453", "7568-7458", "7498-7351", "7498-7458", "7498-7453", "7504-7453", "7497-7453", "7571-7453",
     ]),
     topshirishRules: createSet(["7351-7498"])
   },
@@ -159,7 +159,7 @@ export const identifyTrainProtocol = (fullIndex: string): { mgsp: string, type: 
   const customRules = getCustomProtocols();
   const matchedCustom = customRules.find(r => r.index === key);
   if (matchedCustom) {
-      return { mgsp: matchedCustom.mgsp, type: matchedCustom.type };
+    return { mgsp: matchedCustom.mgsp, type: matchedCustom.type };
   }
 
   // 2. Static strict fallback mapping definition rules

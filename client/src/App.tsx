@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Station, Wagon, MapPoint, MtuRegion, Language, DateRange, AdminUser } from './types';
-import { loadStationDataAsync, rehydrateWagons, parseOperationalDataGenerator, groupDataByDate, extractReportDate, calculateRailwayDate } from './utils/parser';
+import { loadStationDataAsync, rehydrateWagons, parseOperationalDataGenerator, groupDataByDate, extractReportDate, calculateRailwayDate, filterServiceTrains } from './utils/parser';
 import { cleanDataWithAI } from './utils/aiService';
 import { saveDailyReport, getReportByDate, getReportsInRange, subscribeToSettings, getReportDates, deleteTrainFromReport, logSystemAction } from './utils/db';
 import { getTranslation } from './utils/translations';
@@ -252,6 +252,26 @@ const MiniCalendar: React.FC<MiniCalendarProps> = ({ dateRange, onSelectRange, a
 
   return (
     <div className="bg-[#0f172a] rounded-2xl p-4 border border-white/5 select-none w-full shadow-2xl">
+      {/* Top Header / Clear Button */}
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          {lang === 'uz' ? 'Sana' : 'Дата'}
+        </span>
+        <button
+          onClick={() => {
+            const today = new Date().toISOString().split('T')[0];
+            onSelectRange({ startDate: today, endDate: today, type: 'day' });
+            setSelectionMode('day');
+            setCustomStart(null);
+            setCurrentMonth(new Date(today));
+          }}
+          className="text-[10px] flex items-center gap-1.5 font-bold bg-white/5 hover:bg-red-500/20 text-slate-300 hover:text-red-400 px-2.5 py-1.5 rounded-lg transition-colors border border-white/5 border-b-0 hover:border-red-500/30"
+        >
+          <RotateCcw className="w-3 h-3" />
+          {lang === 'uz' ? 'Tozalash' : 'Сброс'}
+        </button>
+      </div>
+
       {/* Mode Switcher */}
       <div className="flex bg-[#1e293b] p-1 rounded-xl mb-4 border border-white/5">
         {(['day', 'week', 'month', 'custom'] as const).map(m => (
@@ -262,7 +282,9 @@ const MiniCalendar: React.FC<MiniCalendarProps> = ({ dateRange, onSelectRange, a
               setCustomStart(null); // Reset custom draft
 
               // Auto-select defaults for non-custom modes
-              if (m === 'day') handleDayClick(new Date(dateRange.endDate).getDate());
+              if (m === 'day') {
+                onSelectRange({ startDate: dateRange.endDate, endDate: dateRange.endDate, type: 'day' });
+              }
               if (m === 'week') {
                 const { start, end } = getWeekRange(new Date(dateRange.endDate));
                 onSelectRange({ startDate: start, endDate: end, type: 'week' });
@@ -869,12 +891,16 @@ const App: React.FC = () => {
 
 
 
+  // --- FILTER SERVICE TRAINS ---
+  // Exclude single-wagon trains with index 8000-9999 (technical/service movements)
+  const displayWagons = useMemo(() => filterServiceTrains(wagons), [wagons]);
+
   // --- TRAIN COUNTING LOGIC ---
   const trainCount = useMemo(() => {
     // If we have loaded wagons (e.g., from DB or API), count unique train indexes
-    if (wagons.length > 0) {
+    if (displayWagons.length > 0) {
       const uniqueIndexes = new Set<string>();
-      wagons.forEach(w => {
+      displayWagons.forEach(w => {
         if (w.trainIndex) uniqueIndexes.add(w.trainIndex.trim());
       });
       return uniqueIndexes.size;
@@ -900,7 +926,7 @@ const App: React.FC = () => {
     }
 
     return uniqueTrains.size;
-  }, [wagons, customOpData]);
+  }, [displayWagons, customOpData]);
 
   const readFileContent = async (file: File): Promise<string> => {
     try {
@@ -1243,7 +1269,7 @@ const App: React.FC = () => {
             <div className="flex flex-col gap-2 items-center">
               <div className="text-[10px] font-mono text-slate-400 font-bold">{stations.length}</div>
               <div className="h-0.5 w-6 bg-slate-800 rounded-full"></div>
-              <div className="text-[10px] font-mono text-blue-500 font-bold">{wagons.length}</div>
+              <div className="text-[10px] font-mono text-blue-500 font-bold">{displayWagons.length}</div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-4">
@@ -1253,7 +1279,7 @@ const App: React.FC = () => {
               </div>
               <div className="bg-slate-900/50 p-2 rounded-lg border border-slate-800">
                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-0.5">{t('wagons')}</p>
-                <p className="text-lg font-mono font-bold text-blue-400 tracking-tight">{wagons.length}</p>
+                <p className="text-lg font-mono font-bold text-blue-400 tracking-tight">{displayWagons.length}</p>
               </div>
             </div>
           )}
@@ -1277,7 +1303,7 @@ const App: React.FC = () => {
         <>
           {(activeTab === 'home' || activeTab === 'admin') && (
             <div className="flex-1 overflow-hidden relative h-full w-full">
-              {activeTab === 'home' && <HomePage wagons={wagons} mapPoints={mapPoints} mtuRegions={mtuRegions} lang={lang} t={t} />}
+              {activeTab === 'home' && <HomePage wagons={displayWagons} mapPoints={mapPoints} mtuRegions={mtuRegions} lang={lang} t={t} />}
               {activeTab === 'admin' && currentUser?.role === 'superadmin' && <AdminPage mapPoints={mapPoints} setMapPoints={setMapPoints} mtuRegions={mtuRegions} setMtuRegions={setMtuRegions} lang={lang} t={t} />}
             </div>
           )}
@@ -1294,7 +1320,7 @@ const App: React.FC = () => {
                 <div className="p-4 md:p-8 lg:p-10 max-w-[1920px] mx-auto min-h-full">
                   <Dashboard
                     stations={stations}
-                    wagons={wagons}
+                    wagons={displayWagons}
                     trainCount={trainCount}
                     lang={lang}
                     t={t}

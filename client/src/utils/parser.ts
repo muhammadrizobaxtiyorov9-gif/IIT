@@ -664,6 +664,60 @@ export const verifyTrainRoute = (
 };
 
 /**
+ * Extracts the train number from a train index string.
+ * Example: "8802 (6983+064+7209)" → 8802
+ * Example: "(6983+064+7209)" → null (no train number)
+ */
+const extractTrainNumber = (trainIndex: string): number | null => {
+  const match = trainIndex.trim().match(/^(\d{3,5})\s+\(/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  return null;
+};
+
+/**
+ * Filters out service/technical trains from the wagon list.
+ * A service train is defined as one that meets BOTH conditions:
+ *   1. Train number is in the 8000-9999 range
+ *   2. The train has only 1 wagon in the consist
+ *
+ * These are typically locomotive-only movements or technical wagons
+ * that should not be counted in operational statistics.
+ */
+export const filterServiceTrains = (wagons: Wagon[]): Wagon[] => {
+  if (wagons.length === 0) return wagons;
+
+  // Step 1: Group wagons by train index and count per train
+  const trainWagonCounts = new Map<string, number>();
+  wagons.forEach(w => {
+    const idx = (w.trainIndex || '').trim();
+    if (idx) {
+      trainWagonCounts.set(idx, (trainWagonCounts.get(idx) || 0) + 1);
+    }
+  });
+
+  // Step 2: Build a set of train indexes to exclude
+  const excludedTrains = new Set<string>();
+  trainWagonCounts.forEach((count, idx) => {
+    if (count === 1) {
+      const trainNum = extractTrainNumber(idx);
+      if (trainNum !== null && trainNum >= 8000 && trainNum <= 9999) {
+        excludedTrains.add(idx);
+      }
+    }
+  });
+
+  if (excludedTrains.size === 0) return wagons;
+
+  // Step 3: Filter out wagons belonging to excluded trains
+  return wagons.filter(w => {
+    const idx = (w.trainIndex || '').trim();
+    return !excludedTrains.has(idx);
+  });
+};
+
+/**
  * GENERATOR FUNCTION FOR TIME-SLICING
  */
 export function* parseOperationalDataGenerator(rawData: string, stations: Station[], lang: Language = 'ru'): Generator<Wagon[], void, unknown> {
