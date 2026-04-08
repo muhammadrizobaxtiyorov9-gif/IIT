@@ -4,6 +4,7 @@ import { Station, Wagon, MapPoint, MtuRegion, Language, DateRange, AdminUser } f
 import { loadStationDataAsync, rehydrateWagons, parseOperationalDataGenerator, groupDataByDate, extractReportDate, calculateRailwayDate, filterServiceTrains } from './utils/parser';
 import { cleanDataWithAI } from './utils/aiService';
 import { saveDailyReport, getReportByDate, getReportsInRange, subscribeToSettings, getReportDates, deleteTrainFromReport, logSystemAction } from './utils/db';
+import { loadCustomProtocolsAsync } from './utils/trainProtocols';
 import { getTranslation } from './utils/translations';
 import Dashboard from './components/dashboard/Dashboard';
 import HomePage from './components/dashboard/HomePage';
@@ -492,6 +493,9 @@ const App: React.FC = () => {
 
         // Fire metadata sync in background (non-blocking)
         refreshAvailableDates();
+        
+        // Ensure custom rules are loaded into memory globally for the current browser session
+        loadCustomProtocolsAsync().catch(() => {});
 
         // 2. Load the actual report payload ONLY AFTER stations are available in memory
         await loadDataForRange(dateRange, loadedStations);

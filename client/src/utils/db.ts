@@ -10,9 +10,26 @@ import { logger } from './logger'; // Import logger
 
 // --- CONFIGURATION FROM .ENV ---
 // @ts-ignore: Vite env object
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 // @ts-ignore: Vite env object
 const USE_LOCAL_BACKEND = import.meta.env.VITE_USE_LOCAL_BACKEND !== 'false'; // Default to true if undefined
+
+// --- AUTHENTICATED FETCH HELPER ---
+export const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const token = localStorage.getItem('auth_token');
+  const headers = new Headers(options.headers || {});
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    // Optionally trigger a logout event here if unauthorized
+    localStorage.removeItem('auth_token');
+    window.dispatchEvent(new Event('auth_unauthorized'));
+  }
+  return res;
+};
 
 // --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
@@ -734,75 +751,45 @@ export const subscribeToSettings = (onUpdate: (settings: AppSettings) => void): 
 const DEFAULT_ADMIN: AdminUser = { username: 'admin', role: 'superadmin', name: 'Super Admin', addedAt: Date.now(), deviceInfo: 'System', lastLogin: Date.now() };
 
 export const verifyAdmin = async (username: string, pass: string, deviceInfo: string): Promise<AdminUser | null> => {
-  if (USE_LOCAL_BACKEND) {
-    const localAdmins = LS.getAdmins();
-    const found = localAdmins.find((a: any) => a.username === username && a.password === pass);
-    if (found) {
-      if (username === 'admin' && found.role !== 'superadmin') {
-        found.role = 'superadmin';
-        LS.saveAdmin(found);
-      }
-      return found;
-    }
-    if (username === 'admin' && pass === 'admin' && localAdmins.length === 0) return DEFAULT_ADMIN;
-    return null;
-  }
-
   try {
-    if (db) {
-      const docRef = doc(db, "admins", username);
-      const docSnap = await withTimeout(getDoc(docRef), 3000) as DocumentSnapshot<DocumentData>;
-      if (docSnap.exists() && docSnap.data()?.password === pass) {
-        const data = docSnap.data() as AdminUser;
-        if (username === 'admin' && data.role !== 'superadmin') {
-          data.role = 'superadmin';
-          await setDoc(docRef, { role: 'superadmin' }, { merge: true }).catch(() => { });
-        }
-        // AUTO-MIGRATE: assign immutable uid if user doesn't have one yet
-        if (!data.uid) {
-          data.uid = generateUid();
-          await setDoc(docRef, { uid: data.uid }, { merge: true }).catch(() => { });
-        }
-        await setDoc(docRef, { lastLogin: Date.now(), deviceInfo }, { merge: true }).catch(() => { });
-        return data;
-      } else if (username === 'admin' && pass === 'admin') {
-        const adminsSnap = await getDocs(collection(db, "admins"));
-        if (adminsSnap.empty) {
-          await setDoc(docRef, { ...DEFAULT_ADMIN, password: 'admin' });
-          return DEFAULT_ADMIN;
-        }
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: pass, deviceInfo })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.token) {
+        localStorage.setItem('auth_token', data.token); // Securely store JWT
+        return data.user as AdminUser;
       }
     } else {
-      const localAdmins = LS.getAdmins();
-      const found = localAdmins.find((a: any) => a.username === username && a.password === pass);
-      if (found) {
-        if (username === 'admin' && found.role !== 'superadmin') {
-          found.role = 'superadmin';
-          LS.saveAdmin(found);
-        }
-        return found;
-      }
-      if (username === 'admin' && pass === 'admin' && localAdmins.length === 0) return DEFAULT_ADMIN;
+      console.error("Login failed:", await res.text());
     }
-  } catch (e) { }
+  } catch (e) {
+    console.error("Auth Exception:", e);
+  }
   return null;
 };
 
 // --- ADMIN MANAGEMENT ---
 
 export const getAdmins = async (): Promise<AdminUser[]> => {
-  if (!USE_LOCAL_BACKEND && db) {
-    try {
-      const snapshot = await withTimeout(getDocs(collection(db, "admins"))) as QuerySnapshot<DocumentData>;
-      if (!snapshot.empty) {
-        return snapshot.docs.map(d => {
-          const data = d.data() as AdminUser;
-          if (data.username === 'admin') data.role = 'superadmin';
-          return data;
-        });
-      }
-    } catch (e) { }
+  try {
+    const res = await fetchWithAuth(`${API_URL}/auth`);
+    if (res.ok) {
+      const data = await res.json();
+      return data.map((a: any) => {
+        if (a.username === 'admin') a.role = 'superadmin';
+        return a;
+      });
+    }
+  } catch (e) {
+    console.error("Failed to fetch admins from API:", e);
   }
+
+  // Fallback to local
   const local = LS.getAdmins();
   if (local.length > 0) {
     return local.map((a: any) => {
@@ -825,19 +812,28 @@ export const subscribeToAdmins = (onUpdate: (admins: AdminUser[]) => void): () =
 };
 
 export const addAdmin = async (admin: AdminUser, pass: string, creator?: string): Promise<boolean> => {
-  // Ensure every new user has an immutable uid
+  try {
+    const res = await fetchWithAuth(`${API_URL}/auth/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...admin, password: pass, createdBy: creator })
+    });
+    
+    if (res.ok) {
+      if (creator) logSystemAction('ADMIN_ADD', creator, `Added admin: ${admin.username}`);
+      return true;
+    } else {
+      console.error("API user add failed");
+    }
+  } catch (e) {
+    console.error(e);
+  }
+
+  // Fallback
   const uid = admin.uid || generateUid();
   const newAdmin = { ...admin, uid, password: pass, createdBy: creator };
   LS.saveAdmin(newAdmin);
   notifyChange('admins');
-
-  if (creator) {
-    logSystemAction('ADMIN_ADD', creator, `Added admin: ${admin.username}`);
-  }
-
-  if (!USE_LOCAL_BACKEND && db) {
-    try { await withTimeout(setDoc(doc(db, "admins", admin.username), newAdmin)); } catch (e) { }
-  }
   return true;
 };
 

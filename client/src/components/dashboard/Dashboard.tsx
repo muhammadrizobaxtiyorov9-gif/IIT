@@ -9,7 +9,7 @@ import TrainInfographics from '../reports/TrainInfographics';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-import { TrainFront, MapPin, AlertCircle, Filter, Search, Table2, BarChart3, ChevronDown, Container, ArrowRightLeft, ChevronLeft, ChevronRight, Hash, X, CheckSquare, Square, Weight, FileSpreadsheet, CheckCircle2, Calendar, Clock, FileText, Trash2, Copy, PackageOpen, CheckCircle } from 'lucide-react';
+import { TrainFront, MapPin, AlertCircle, Filter, Search, Table2, BarChart3, ChevronDown, Container, ArrowRightLeft, ChevronLeft, ChevronRight, Hash, X, CheckSquare, Square, Weight, FileSpreadsheet, CheckCircle2, Calendar, Clock, FileText, Trash2, Copy, PackageOpen, CheckCircle, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
 interface DashboardProps {
    stations: Station[];
@@ -111,6 +111,28 @@ const getTrainStats = (wagons: Wagon[], stations: Station[]) => {
    return stats;
 };
 
+/**
+ * Determines if a train is "Вход" (entry) or "Выход" (exit) based on the first code
+ * in the train index (IDX1 in the format TRAINNUM (IDX1+IDX2+IDX3)).
+ * - If IDX1 is an Uzbekistan station (72xxx, 73xxx), it's "exit" (train is leaving UZ)
+ * - If IDX1 is a foreign/border station, it's "entry" (train is coming into UZ)
+ */
+const getTrainDirection = (trainIndex: string): 'entry' | 'exit' | 'unknown' => {
+   const match = trainIndex.match(/\(\s*(\d{3,6})\s*\+/);
+   if (!match) return 'unknown';
+   
+   const idx1 = match[1];
+   const prefix2 = parseInt(idx1.substring(0, 2), 10);
+   
+   // Uzbekistan station codes start with 72 or 73
+   if (prefix2 === 72 || prefix2 === 73) {
+      return 'exit'; // Train originates from UZ = Выход (сдача)
+   }
+   
+   // Everything else is foreign/border = Вход (приём)
+   return 'entry';
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lang, t, selectedDate, dateRange, onDateRangeChange, onDeleteTrain }) => {
    const [selectedRegion, setSelectedRegion] = useState<string>('all');
    const [selectedDestination, setSelectedDestination] = useState<string>('all');
@@ -138,6 +160,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
    const [filterEntryPoint, setFilterEntryPoint] = useState<string>('all');
    const [filterDestination, setFilterDestination] = useState<string>('all');
    const [trainSearchQuery, setTrainSearchQuery] = useState<string>('');
+   const [filterDirection, setFilterDirection] = useState<'all' | 'entry' | 'exit'>('all');
 
    // Naturka and Delete Modal States
    const [viewNaturkaTrain, setViewNaturkaTrain] = useState<string | null>(null);
@@ -158,6 +181,13 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
 
    const filteredWagons = useMemo(() => {
       return wagons.filter(w => {
+         // 0. Direction Filter (Вход / Выход)
+         if (filterDirection !== 'all') {
+            const idx = (w.trainIndex || '').trim();
+            const direction = getTrainDirection(idx);
+            if (direction !== filterDirection) return false;
+         }
+
          // 1. Train Selection Filter
          if (selectedTrains.size > 0) {
             const normalizedIdx = (w.trainIndex || "").trim();
@@ -191,7 +221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
          }
          return true;
       });
-   }, [wagons, selectedRegion, selectedDestination, debouncedSearch, lang, selectedTrains]);
+   }, [wagons, selectedRegion, selectedDestination, debouncedSearch, lang, selectedTrains, filterDirection]);
 
    // Pagination Logic
    const totalPages = Math.ceil(filteredWagons.length / ITEMS_PER_PAGE);
@@ -238,6 +268,25 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
 
    // Train List & Map Logic
    const trainStats = useMemo(() => getTrainStats(wagons, stations), [wagons, stations]);
+
+   // Train Direction Map (Вход / Выход)
+   const trainDirectionMap = useMemo(() => {
+      const map: Record<string, 'entry' | 'exit' | 'unknown'> = {};
+      Object.keys(trainStats).forEach(idx => {
+         map[idx] = getTrainDirection(idx);
+      });
+      return map;
+   }, [trainStats]);
+
+   // Direction counts
+   const directionCounts = useMemo(() => {
+      let entry = 0, exit = 0;
+      Object.values(trainDirectionMap).forEach(d => {
+         if (d === 'entry') entry++;
+         else if (d === 'exit') exit++;
+      });
+      return { entry, exit };
+   }, [trainDirectionMap]);
    const trainList = useMemo(() => {
       return Object.keys(trainStats).sort((a, b) => {
          const dateA = trainStats[a].arrivalDate;
@@ -298,7 +347,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
          const matchesEntry = filterEntryPoint === 'all' || trainEntryMap[id] === filterEntryPoint;
          const matchesDest = filterDestination === 'all' || trainStats[id].mainDestination === filterDestination;
          const matchesSearch = trainSearchQuery === '' || id.toLowerCase().includes(trainSearchQuery.toLowerCase());
-         return matchesEntry && matchesDest && matchesSearch;
+         const matchesDirection = filterDirection === 'all' || trainDirectionMap[id] === filterDirection;
+         return matchesEntry && matchesDest && matchesSearch && matchesDirection;
       });
 
       // Sort by arrival date (ascending)
@@ -309,7 +359,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
       });
 
       return list;
-   }, [trainList, filterEntryPoint, filterDestination, trainSearchQuery, trainEntryMap, trainStats]);
+   }, [trainList, filterEntryPoint, filterDestination, trainSearchQuery, trainEntryMap, trainStats, filterDirection, trainDirectionMap]);
 
    const actualTrainCount = trainList.length;
 
@@ -434,6 +484,32 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                               value={trainSearchQuery}
                               onChange={(e) => setTrainSearchQuery(e.target.value)}
                            />
+                        </div>
+
+                        {/* Direction Filter (Вход / Выход) */}
+                        <div className="flex bg-slate-100 rounded-xl p-0.5 border border-slate-200">
+                           <button
+                              onClick={() => setFilterDirection('all')}
+                              className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-all ${filterDirection === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                           >
+                              {lang === 'uz' ? 'Barchasi' : 'Все'}
+                           </button>
+                           <button
+                              onClick={() => setFilterDirection('entry')}
+                              className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 ${filterDirection === 'entry' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                           >
+                              <ArrowDownLeft className="w-3 h-3" />
+                              {lang === 'uz' ? 'Kirish' : 'Вход'}
+                              <span className="opacity-70">{directionCounts.entry}</span>
+                           </button>
+                           <button
+                              onClick={() => setFilterDirection('exit')}
+                              className={`px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1 ${filterDirection === 'exit' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                           >
+                              <ArrowUpRight className="w-3 h-3" />
+                              {lang === 'uz' ? 'Chiqish' : 'Выход'}
+                              <span className="opacity-70">{directionCounts.exit}</span>
+                           </button>
                         </div>
 
                         <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">

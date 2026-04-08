@@ -1,5 +1,6 @@
 import express from 'express';
 import Settings from '../models/Settings.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ router.get('/', async (req, res) => {
  * POST /api/settings
  * Upserts the flat map_config document.
  */
-router.post('/', async (req, res) => {
+router.post('/', protect, async (req, res) => {
   try {
     const { mapPoints, mtuRegions } = req.body || {};
     if (!mapPoints || !mtuRegions) {

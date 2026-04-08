@@ -17,18 +17,83 @@ export interface CustomProtocolRule {
   mgsp: string; // Target Station
 }
 
+import { API_URL, fetchWithAuth } from './db';
+
+// --- BACKEND API INTEGRATION ---
+
+// In-memory cache for synchronous operations (so we don't break existing code)
+let memoryProtocols: CustomProtocolRule[] = [];
+
 export const getCustomProtocols = (): CustomProtocolRule[] => {
+  if (memoryProtocols.length > 0) return memoryProtocols;
   try {
     const raw = localStorage.getItem('custom_train_protocols');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      memoryProtocols = parsed;
+      return parsed;
+    }
   } catch (e) {
-    console.error("Failed to parse custom protocols", e);
+    console.error("Failed to parse custom protocols from localStorage", e);
   }
   return [];
 };
 
 export const saveCustomProtocols = (protocols: CustomProtocolRule[]) => {
+  memoryProtocols = protocols;
   localStorage.setItem('custom_train_protocols', JSON.stringify(protocols));
+};
+
+export const loadCustomProtocolsAsync = async (): Promise<CustomProtocolRule[]> => {
+  try {
+    const res = await fetch(`${API_URL}/protocols`);
+    if (res.ok) {
+      const data = await res.json();
+      saveCustomProtocols(data);
+      return data;
+    }
+  } catch (e) {
+    console.warn("Failed to load protocols from backend, falling back to localStorage", e);
+  }
+  return getCustomProtocols();
+};
+
+export const addCustomProtocolAsync = async (rule: Partial<CustomProtocolRule> & { index: string, type: CustomProtocolType, mgsp: string, createdBy?: string }): Promise<void> => {
+  try {
+    const res = await fetchWithAuth(`${API_URL}/protocols`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rule)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.rule) {
+        const updated = [...getCustomProtocols(), data.rule];
+        saveCustomProtocols(updated);
+      }
+    } else {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add rule');
+    }
+  } catch (e) {
+    console.error("Backend protocol save failed:", e);
+    throw e;
+  }
+};
+
+export const deleteCustomProtocolAsync = async (id: string): Promise<void> => {
+  try {
+    const res = await fetchWithAuth(`${API_URL}/protocols/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      const updated = getCustomProtocols().filter(r => r.id !== id);
+      saveCustomProtocols(updated);
+    } else {
+      throw new Error('Failed to delete rule from backend');
+    }
+  } catch (e) {
+    console.error("Backend protocol delete failed:", e);
+    throw e;
+  }
 };
 
 // Yordamchi funksiya: Indeks oralig'ini yaratish (agar kerak bo'lsa) yoki ro'yxatni shakllantirish

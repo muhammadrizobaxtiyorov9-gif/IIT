@@ -6,12 +6,16 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import connectDB from './config/db';
 
+// Security Middleware
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 // Routes
 import authRoutes from './routes/authRoutes';
 import reportRoutes from './routes/reportRoutes';
 import logRoutes from './routes/logRoutes';
 import integrationRoutes from './routes/integrationRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js'; // Modular settings router
+import protocolRoutes from './routes/protocolRoutes.js'; // Protocol rules API
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,10 +26,22 @@ async function startServer() {
   // Connect to MongoDB
   await connectDB();
 
-  // Middleware
+  // Security Middleware Layer
+  app.use(helmet()); // Set security HTTP headers
+  
+  // Rate limiting
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 500, // Limit each IP to 500 requests per `window` (here, per 15 minutes)
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  });
+  app.use('/api', limiter);
+
+  // Standard Middleware
   app.use(cors());
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(express.json({ limit: '2mb' })); // Reduced from 50mb to prevent DoS
+  app.use(express.urlencoded({ limit: '2mb', extended: true }));
 
   // Static Data paths
   const STATION_DATA_FILE = path.join(__dirname, '../client/public/data/station_data.json');
@@ -36,6 +52,7 @@ async function startServer() {
   app.use('/api/logs', logRoutes);
   app.use('/api/integration', integrationRoutes); // ADDED
   app.use('/api/settings', settingsRoutes);       // ADDED (Modular Refactoring)
+  app.use('/api/protocols', protocolRoutes);       // Protocol rules (custom overrides)
 
   // --- STATIC FILE ROUTES (For huge fixed datasets) ---
   
