@@ -553,7 +553,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
             className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-200 transition-colors print:hidden flex items-center gap-2"
             title="Manage and test dynamic Train Protocols without code updates"
           >
-            <Settings className="w-4 h-4" /> Manage Protocols
+            <Settings className="w-4 h-4" /> Protokollarni boshqarish
           </button>
           <button
             onClick={handleExportExcel}
