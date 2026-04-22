@@ -237,6 +237,23 @@ const dictionary: Record<string, Record<Language, string>> = {
   "validation_error_old_pass": { ru: "Необходимо ввести старый пароль.", uz: "Eski parolni kiritish shart." },
   "validation_error_mismatch": { ru: "Пароли не совпадают.", uz: "Parollar mos kelmadi." },
   "system_error": { ru: "Произошла системная ошибка", uz: "Tizim xatosi yuz berdi" },
+
+  // --- MGSP Station Names (Stickers/Badges) ---
+  "mgsp_САРЫАГАЧ": { ru: "САРЫАГАЧ", uz: "SARIOG'OCH" },
+  "mgsp_СЫРДАРЬЯ": { ru: "СЫРДАРЬЯ", uz: "SIRDARYO" },
+  "mgsp_БЕКАБАД": { ru: "БЕКАБАД", uz: "BEKOBOD" },
+  "mgsp_ИСТИКЛОЛ": { ru: "ИСТИКЛОЛ", uz: "ISTIQLOL" },
+  "mgsp_КИРГИЗИЯ": { ru: "КИРГИЗИЯ", uz: "QIRG'IZISTON" },
+  "mgsp_ХОДЖИДАВЛЕТ": { ru: "ХОДЖИДАВЛЕТ", uz: "XOJIDAVLAT" },
+  "mgsp_ТАЛИМАРДЖАН": { ru: "ТАЛИМАРДЖАН", uz: "TALIMARJON" },
+  "mgsp_РАЗЪЕЗД 161": { ru: "РАЗЪЕЗД 161", uz: "RAZ'YEZD 161" },
+  "mgsp_КУДУКЛИ": { ru: "КУДУКЛИ", uz: "QUDUQLI" },
+  "mgsp_АМУЗАНГ": { ru: "АМУЗАНГ", uz: "AMUZANG" },
+  "mgsp_ГАЛАБА": { ru: "ГАЛАБА", uz: "G'ALABA" },
+  "mgsp_ТАХИАТАШ": { ru: "ТАХИАТАШ", uz: "TOXIATOSH" },
+  "mgsp_КАРАКАЛПАКСТАН": { ru: "КАРАКАЛПАКСТАН", uz: "QORAQALPOG'ISTON" },
+  "mgsp_АМЫДЕРЯ": { ru: "АМЫДЕРЯ", uz: "AMUDARYO" },
+  "mgsp_ПРОЧИЕ": { ru: "ПРОЧИЕ", uz: "BOSHQALAR" },
 };
 
 export const getTranslation = (key: string, lang: Language): string => {
@@ -261,4 +278,36 @@ export const getRegionName = (rawName: string, lang: Language): string => {
 export const getCargoNameTranslated = (code: string | undefined, lang: Language): string => {
   if (!code) return getTranslation("unknown", lang);
   return analyzeCargoCode(code);
+};
+
+/**
+ * Transliterates Cyrillic text to Latin script.
+ */
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'Yo', 'Ж': 'J',
+  'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N', 'О': 'O',
+  'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U', 'Ф': 'F', 'Х': 'X', 'Ц': 'S',
+  'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sh', 'Ъ': '\'', 'Ы': 'I', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',
+  'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'j',
+  'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+  'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'x', 'ц': 's',
+  'ч': 'ch', 'ш': 'sh', 'щ': 'sh', 'ъ': '\'', 'ы': 'i', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+};
+
+export const transliterateCyrillicToLatin = (text: string): string => {
+  if (!text) return text;
+  return text.split('').map(char => CYRILLIC_TO_LATIN[char] !== undefined ? CYRILLIC_TO_LATIN[char] : char).join('');
+};
+
+/**
+ * Translates MGSP station names to the appropriate language.
+ * In Russian mode, returns the original Cyrillic name.
+ * In Uzbek mode, returns the Latin script equivalent.
+ */
+export const getMgspDisplayName = (mgspName: string, lang: Language): string => {
+  if (lang === 'ru') return mgspName;
+  const key = `mgsp_${mgspName}`;
+  const translated = dictionary[key];
+  if (translated && translated[lang]) return translated[lang];
+  return transliterateCyrillicToLatin(mgspName);
 };

@@ -6,11 +6,11 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 dotenv.config();
 
 const API_BASE_URL = 'https://e-nakl.railway.uz/public/api';
-const CLIENT_ID     = process.env.RAILWAY_CLIENT_ID     || 'arm_kontora';
+const CLIENT_ID = process.env.RAILWAY_CLIENT_ID || 'arm_kontora';
 const CLIENT_SECRET = process.env.RAILWAY_CLIENT_SECRET || '$arm_kontora$';
 
 let currentToken: string | null = null;
-let tokenExpiry:  Date   | null = null;
+let tokenExpiry: Date | null = null;
 
 // =====================================================================
 // AUTHENTICATE — Token caching with expiry
@@ -30,7 +30,7 @@ export const authenticateRailwayApi = async (): Promise<string> => {
         const data = response.data;
         if (data?.value) {
             currentToken = data.value.replace(/[\r\n\s]+/g, '');
-            tokenExpiry  = data.expiryDate
+            tokenExpiry = data.expiryDate
                 ? new Date(data.expiryDate)
                 : new Date(Date.now() + 55 * 60 * 1000);
             console.log('[Auth] Token refreshed, expires:', tokenExpiry);
@@ -49,22 +49,22 @@ export const authenticateRailwayApi = async (): Promise<string> => {
 export const fetchDu1Data = async (date: string): Promise<any> => {
     try {
         const token = await authenticateRailwayApi();
-        const url   = `${API_BASE_URL}/Du1/GetDu1ForInfrastructure?date=${date}`;
+        const url = `${API_BASE_URL}/Du1/GetDu1ForInfrastructure?date=${date}`;
 
         console.log(`[API] Fetching DU-1 data for ${date}...`);
         const response = await axios.get(url, {
             httpsAgent,
             headers: {
                 'Authorization': token,
-                'Accept':        'application/json',
-                'User-Agent':    'Mozilla/5.0'
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0'
             },
             timeout: 120000  // 2 minutes — this endpoint is slow
         });
 
         const count = response.data?.data?.length ?? 0;
         console.log(`[API] Received ${count} train blocks for ${date}`);
-        
+
         // =======================================================================
         // 🛠️ DEBUG TAVSIYASI: E-Nakl API dan kelayotgan JSON ni ko'rish uchun 
         // pastdagi qatorni commentdan chiqaring:
@@ -125,21 +125,21 @@ const normalizeStationCode = (code: any): string => {
 // Used as fallback when API sends borderStationCode as null
 // =====================================================================
 const MGSP_STATION_CODES: Record<string, string> = {
-    'САРЫАГАЧ':       '69830',
-    'СЫРДАРЬЯ':       '72530',
-    'БЕКАБАД':        '72620',
-    'ИСТИКЛОЛ':       '73990',
+    'САРЫАГАЧ': '69830',
+    'СЫРДАРЬЯ': '72530',
+    'БЕКАБАД': '72620',
+    'ИСТИКЛОЛ': '73990',
     'КАРАКАЛПАКСТАН': '73690',
-    'КУДУКЛИ':        '73620',
-    'АМУЗАНГ':        '73650',
-    'ГАЛАБА':         '73640',
-    'ТАХИАТАШ':       '73890',
-    'ХОДЖИДАВЛЕТ':    '73080',
-    'РАЗЪЕЗД 161':    '74990',
-    'КАРАСУ':        '71810',
-    'ШОЛЛИСОЙ':      '71920',
-    'КИЗИЛКИЯ':      '71910',
-    'АМЫДЕРЯ':       '74912'
+    'КУДУКЛИ': '73620',
+    'АМУЗАНГ': '73650',
+    'ГАЛАБА': '73640',
+    'ТАХИАТАШ': '73890',
+    'ХОДЖИДАВЛЕТ': '73080',
+    'РАЗЪЕЗД 161': '74990',
+    'КАРАСУ': '71810',
+    'ШОЛЛИСОЙ': '71920',
+    'КИЗИЛКИЯ': '71910',
+    'АМЫДЕРЯ': '74912'
 };
 
 // QabulRules: "beginPrefix-endPrefix" → MGSP station name
@@ -202,10 +202,10 @@ export const parseRailwayDataToTrains = (apiData: any): any[] => {
 
     apiData.data.forEach((trainBlock: any, trainIdx: number) => {
         // === TRAIN IDENTITY FIELDS ===
-        const numPoezd         = String(trainBlock.numPoezd         || '').trim();
-        const numSostav        = String(trainBlock.numSostav         || '').trim();
+        const numPoezd = String(trainBlock.numPoezd || '').trim();
+        const numSostav = String(trainBlock.numSostav || '').trim();
         const beginStationCode = normalizeStationCode(trainBlock.beginStationCode);
-        const endStationCode   = normalizeStationCode(trainBlock.endStationCode);
+        const endStationCode = normalizeStationCode(trainBlock.endStationCode);
 
         // === BORDER STATION CODE (MGSP entry point) ===
         // 1. Normalize 6→5 digits
@@ -213,9 +213,19 @@ export const parseRailwayDataToTrains = (apiData: any): any[] => {
         let borderStationCode = normalizeStationCode(trainBlock.borderStationCode);
         if (!borderStationCode) {
             const beginPrefix = beginStationCode.substring(0, 4);
-            const endPrefix   = endStationCode.substring(0, 4);
-            const routeKey    = `${beginPrefix}-${endPrefix}`;
-            const mgspName    = QABUL_RULES[routeKey];
+            const endPrefix = endStationCode.substring(0, 4);
+
+            // 1) Kiruvchi (incoming) yoki Tranzit poyezdlar uchun to'g'ridan-to'g'ri tekshirish
+            let routeKey = `${beginPrefix}-${endPrefix}`;
+            let mgspName = QABUL_RULES[routeKey];
+
+            // 2) Chiquvchi (outgoing) poyezdlar uchun teskari yo'nalishni tekshirish
+            // Chunki chiquvchi poyezdlarda birinchi index O'zbekiston, ikkinchisi boshqa davlat bo'ladi
+            if (!mgspName) {
+                const reverseRouteKey = `${endPrefix}-${beginPrefix}`;
+                mgspName = QABUL_RULES[reverseRouteKey];
+            }
+
             if (mgspName && MGSP_STATION_CODES[mgspName]) {
                 borderStationCode = MGSP_STATION_CODES[mgspName];
                 console.log(`[Fallback] Train ${numPoezd}: borderStationCode null → ${mgspName} (${borderStationCode})`);
@@ -224,7 +234,7 @@ export const parseRailwayDataToTrains = (apiData: any): any[] => {
 
         // Use 4-digit prefix for display consistency as requested by user
         const beginShort = beginStationCode.substring(0, 4) || '0000';
-        const endShort   = endStationCode.substring(0, 4)   || '0000';
+        const endShort = endStationCode.substring(0, 4) || '0000';
         const baseIndex = `${numPoezd} (${beginShort}+${numSostav}+${endShort})`;
 
         // Handle collisions: track occurrence count and append suffix for duplicates
@@ -247,18 +257,18 @@ export const parseRailwayDataToTrains = (apiData: any): any[] => {
                     // Spread ALL original API fields — zero filtering
                     ...w,
                     // Normalize ALL wagon-level station codes from 6→5 digits
-                    sendStationCode:    normalizeStationCode(w.sendStationCode),
+                    sendStationCode: normalizeStationCode(w.sendStationCode),
                     receiveStationCode: normalizeStationCode(w.receiveStationCode),
-                    loadStationCode:    normalizeStationCode(w.loadStationCode),
-                    exportStationCode:  normalizeStationCode(w.exportStationCode),
+                    loadStationCode: normalizeStationCode(w.loadStationCode),
+                    exportStationCode: normalizeStationCode(w.exportStationCode),
                     // Inject border station as entry point for frontend MGSP resolution
                     borderStationCode,
                     // Override/normalize the critical numeric fields
-                    weight:     typeof w.weight     === 'number' ? w.weight     : parseFloat(w.weight)     || 0,
-                    tara:       typeof w.tara       === 'number' ? w.tara       : parseFloat(w.tara)       || 0,
-                    gp:         typeof w.gp         === 'number' ? w.gp         : parseFloat(w.gp)         || 0,
-                    index:      typeof w.index      === 'number' ? w.index      : parseInt(w.index, 10)    || 0,
-                    os:         typeof w.os         === 'number' ? w.os         : parseInt(w.os, 10)       || 0,
+                    weight: typeof w.weight === 'number' ? w.weight : parseFloat(w.weight) || 0,
+                    tara: typeof w.tara === 'number' ? w.tara : parseFloat(w.tara) || 0,
+                    gp: typeof w.gp === 'number' ? w.gp : parseFloat(w.gp) || 0,
+                    index: typeof w.index === 'number' ? w.index : parseInt(w.index, 10) || 0,
+                    os: typeof w.os === 'number' ? w.os : parseInt(w.os, 10) || 0,
                     plombCount: typeof w.plombCount === 'number' ? w.plombCount : parseInt(w.plombCount, 10) || 0,
                     // Derived field for grouping
                     trainIndex,
@@ -282,10 +292,10 @@ export const parseRailwayDataToTrains = (apiData: any): any[] => {
             beginStationCode,
             endStationCode,
             borderStationCode,  // Normalized + fallback applied
-            brutto:      typeof trainBlock.brutto    === 'number' ? trainBlock.brutto    : parseFloat(trainBlock.brutto)    || 0,
-            maxLength:   typeof trainBlock.maxLength === 'number' ? trainBlock.maxLength : parseFloat(trainBlock.maxLength) || 0,
+            brutto: typeof trainBlock.brutto === 'number' ? trainBlock.brutto : parseFloat(trainBlock.brutto) || 0,
+            maxLength: typeof trainBlock.maxLength === 'number' ? trainBlock.maxLength : parseFloat(trainBlock.maxLength) || 0,
             // Computed summary (for quick queries without unrolling all wagons)
-            wagonCount:  wagons.length,
+            wagonCount: wagons.length,
             totalWeight: wagons.reduce((s: number, w: any) => s + (w.weight || 0), 0),
             // Wagons with ALL fields preserved
             wagons,

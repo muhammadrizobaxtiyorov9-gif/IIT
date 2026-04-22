@@ -10,6 +10,7 @@ import DailyReport, { ITrain, IWagon } from '../models/DailyReport';
 //   • Mixed/partial data
 // =====================================================================
 export const normalizeWagon = (w: any, fallbackTrainIndex: string = 'Unknown'): IWagon => ({
+    ...w, // Preserve ALL original API fields (tara, gp, os, customerName, etc.)
     wagonNum:           String(w.wagonNum           ?? w.n   ?? w.number       ?? '00000000').trim(),
     index:              Number(w.index              ?? w.s   ?? w.sequence     ?? 0),
     wagonStranaCode:    String(w.wagonStranaCode    ?? w.country              ?? '').trim(),
@@ -67,7 +68,9 @@ export const saveReport = async (req: Request, res: Response) => {
 
         if (rawTrains.length > 0 && rawWagons.length === 0) {
             // Pre-grouped trains (from integration or direct POST)
+            // Use spread to preserve ALL API fields (datearriveBorderStation, borderStationCode, brutto, etc.)
             groupedTrains = rawTrains.map((t: any) => ({
+                ...t, // Preserve all original API fields
                 trainIndex:       String(t.trainIndex       || 'Unknown').trim(),
                 numPoezd:         String(t.numPoezd         || '').trim(),
                 numSostav:        String(t.numSostav        || '').trim(),
@@ -136,8 +139,13 @@ export const getReport = async (req: Request, res: Response) => {
             (t.wagons || []).forEach((w: any) => {
                 flatWagons.push({
                     ...w,
-                    trainIndex: t.trainIndex, // Always set at train level
-                    ti:         t.trainIndex,
+                    trainIndex:              t.trainIndex, // Always set at train level
+                    ti:                      t.trainIndex,
+                    // Inject train-level fields into each flat wagon
+                    datearriveBorderStation:  t.datearriveBorderStation ?? w.datearriveBorderStation ?? undefined,
+                    borderStationCode:       t.borderStationCode       ?? w.borderStationCode       ?? undefined,
+                    beginStationCode:        t.beginStationCode        ?? w.beginStationCode        ?? undefined,
+                    endStationCode:          t.endStationCode          ?? w.endStationCode          ?? undefined,
                 });
             });
         });

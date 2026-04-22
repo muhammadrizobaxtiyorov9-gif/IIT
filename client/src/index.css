@@ -130,10 +130,11 @@
 @layer utilities {
   @media print {
     @page {
-      size: landscape;
-      margin: 10mm;
+      size: A4 portrait;
+      margin: 5mm 4mm 5mm 4mm;
     }
 
+    html,
     body {
       background: white !important;
       background-image: none !important;
@@ -141,15 +142,26 @@
       margin: 0 !important;
       padding: 0 !important;
       width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+      font-size: 6pt !important;
     }
 
-    /* Hide everything except the printable area */
+    /* Hide non-printable elements */
     aside,
     nav,
     .sidebar,
     .print\:hidden,
-    button,
-    .no-print {
+    .no-print,
+    [class*="print:hidden"] {
+      display: none !important;
+    }
+
+    /* Ensure action buttons in header toolbar are hidden */
+    .printable-area > div:first-child .flex.gap-2 {
+      display: none !important;
+    }
+    .printable-area > div:first-child [class*="bg-slate-100/50"] {
       display: none !important;
     }
 
@@ -172,7 +184,9 @@
       height: auto !important;
       overflow: visible !important;
       margin: 0 !important;
-      padding: 0 !important;
+      padding: 2mm !important;
+      border: none !important;
+      box-shadow: none !important;
     }
 
     .overflow-auto,
@@ -181,19 +195,67 @@
       height: auto !important;
     }
 
+    /* Page Break Support — ensures Import table prints on next page */
+    .overflow-x-auto + .overflow-x-auto,
+    [style*="page-break-before"] {
+      page-break-before: always !important;
+      break-before: page !important;
+    }
+
+    /* ===== TABLE PRINT STYLES ===== */
+    /* Scale tables to fit A4 portrait width */
     table {
       width: 100% !important;
       border-collapse: collapse !important;
-      table-layout: auto !important;
+      table-layout: fixed !important;
+      page-break-inside: auto !important;
+      font-size: 5.5pt !important;
+    }
+
+    tr {
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+
+    thead {
+      display: table-header-group !important;
     }
 
     th,
     td {
-      border: 1px solid #ddd !important;
-      padding: 4px !important;
-      font-size: 8pt !important;
+      border: 0.5px solid #999 !important;
+      padding: 1.5px 2px !important;
+      font-size: 5.5pt !important;
+      line-height: 1.2 !important;
+      word-break: break-word !important;
+      overflow: hidden !important;
     }
 
+    /* Header cells even smaller */
+    th {
+      font-size: 5pt !important;
+      padding: 1px 1.5px !important;
+    }
+
+    /* MGSP name column - give more space */
+    td:nth-child(2),
+    th:nth-child(2) {
+      min-width: 60px !important;
+      max-width: 90px !important;
+      font-size: 5pt !important;
+      word-break: break-word !important;
+    }
+
+    /* Numeric data cells - compact */
+    td:nth-child(n+3) {
+      text-align: center !important;
+      font-size: 5.5pt !important;
+      min-width: 18px !important;
+      max-width: 30px !important;
+      padding: 1px !important;
+    }
+
+    /* Remove rounded borders in print */
     .rounded-3xl,
     .rounded-2xl,
     .rounded-xl,
@@ -201,30 +263,121 @@
       border-radius: 0 !important;
     }
 
+    /* Remove shadows in print */
     .shadow-sm,
     .shadow-md,
     .shadow-lg,
     .shadow-xl,
-    .shadow-2xl {
+    .shadow-2xl,
+    [class*="shadow-"] {
       box-shadow: none !important;
     }
 
+    /* Title and header styling for print */
+    .printable-area > div:first-child {
+      margin-bottom: 3mm !important;
+      padding-bottom: 2mm !important;
+    }
+
+    h2 {
+      font-size: 10pt !important;
+      margin: 0 !important;
+    }
+
+    h3 {
+      font-size: 8pt !important;
+      margin: 2mm 0 1mm 0 !important;
+    }
+
+    p {
+      font-size: 7pt !important;
+      margin: 0 !important;
+    }
+
+    /* Preserve background colors in print */
     .bg-slate-900 {
       background-color: #1e293b !important;
       color: white !important;
       -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .bg-slate-800,
+    .bg-slate-800\/50 {
+      background-color: #334155 !important;
+      color: white !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     .bg-amber-600 {
       background-color: #d97706 !important;
       color: white !important;
       -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
 
     .bg-blue-600 {
       background-color: #2563eb !important;
       color: white !important;
       -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .bg-slate-50,
+    .bg-rose-50,
+    .bg-blue-50 {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Subtotal rows */
+    .bg-rose-50 {
+      background-color: #fff1f2 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .bg-blue-50 {
+      background-color: #eff6ff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Header rows for direction groups */
+    td[colspan] {
+      font-size: 5.5pt !important;
+      padding: 2px 4px !important;
+    }
+
+    /* Hide visual/chart view during print */
+    .space-y-12 > div:last-child[class*="hidden"] {
+      display: none !important;
+    }
+
+    /* Ensure print:block works for table view */
+    .print\:block {
+      display: block !important;
+    }
+
+    /* Import section header */
+    .bg-slate-50.px-4.py-2 {
+      padding: 2px 4px !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* Table wrapper - remove border decorations */
+    .overflow-x-auto {
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      margin-bottom: 0 !important;
+    }
+
+    /* Spacing between sections */
+    .space-y-12 > * + * {
+      margin-top: 0 !important;
     }
   }
-}
+}

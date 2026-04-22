@@ -141,15 +141,15 @@ const detectCountryAndRegion = (code: string, providedOtd?: number): { dor: numb
 
 /**
  * Calculates the "Railway Operational Date".
- * Rule: If time is >= 18:00, it counts as the NEXT calendar day.
- * If time is < 18:00, it counts as the CURRENT calendar day.
+ * Rule: If time is >= 20:00, it counts as the NEXT calendar day.
+ * If time is < 20:00, it counts as the CURRENT calendar day.
  */
 export const calculateRailwayDate = (inputDate: Date): string => {
   const d = new Date(inputDate);
   const hours = d.getHours();
 
-  // Logic: 18:00 is the start of the next railway day
-  if (hours >= 18) {
+  // Logic: 20:00 is the start of the next railway day
+  if (hours >= 20) {
     d.setDate(d.getDate() + 1);
   }
 
@@ -176,8 +176,9 @@ export const extractReportDate = (text: string): Date | null => {
 
   // Regexes
   const prmdRegex = /(?:[ПP][РP][МM][ДDОO0ТT]).*?(\d{2})[.,/](\d{2})[^\d\n]*(\d{1,2})[-:.](\d{2})/i;
+  const otprRegex = /(?:OT[ПP]P|O[ТT][ПP]P).*?(\d{5})?\s*(\d{2})[.,/](\d{2})\s+(\d{1,2})[-:.](\d{2})/i;
   const borderDateRegex = /(?:C|С|c|с)[ПPnmIiÏï1]{2}[BВ8].{0,30}?(\d{2})[.,/](\d{2})\s+(\d{1,2})[-:.,\s](\d{2})/i;
-  const machine902Regex = /^\(:902\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/;
+  const machine902Regex = /^\(:902\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/;
   const genericDateRegex = /(\d{2})[.,/](\d{2})\s+(\d{1,2})[-:.,](\d{2})/;
 
   // Storage for standard parsing
@@ -215,6 +216,15 @@ export const extractReportDate = (text: string): Date | null => {
     const match = line.match(prmdRegex);
     if (match) {
       return tryParseDate(match[1], match[2], match[3], match[4]);
+    }
+  }
+
+  // PRIORITY 1.5: OTPR
+  for (const line of lines) {
+    const match = line.match(otprRegex);
+    if (match) {
+      // For otprRegex: 1=station (optional), 2=day, 3=month, 4=hour, 5=min
+      return tryParseDate(match[2], match[3], match[4], match[5]);
     }
   }
 
@@ -356,7 +366,7 @@ export const groupDataByDate = (fullText: string): Record<string, string> => {
 export const loadStationDataAsync = async (): Promise<Station[]> => {
   const stations: Station[] = [];
   try {
-    const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000/api';
+    const API_BASE = (import.meta as any).env.VITE_API_URL || '/api';
     const res = await fetch(`${API_BASE}/station-data`);
     
     if (!res.ok) {

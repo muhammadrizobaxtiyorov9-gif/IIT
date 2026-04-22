@@ -5,6 +5,7 @@ import { FileText, X, Printer, LayoutGrid, Table, ArrowDownRight, ArrowUpRight, 
 import { PieChart, Pie, Cell as RechartsCell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { identifyTrainProtocol } from '../../utils/trainProtocols';
 import { MGSP_DEFINITIONS, normalizeMgspName } from '../../utils/stationUtils';
+import { getMgspDisplayName } from '../../utils/translations';
 import WagonListModal from '../shared/WagonListModal';
 import ProtocolManagerModal from '../shared/ProtocolManagerModal';
 import * as XLSX from 'xlsx';
@@ -148,6 +149,9 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
   const [protocolModalOpen, setProtocolModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'visual'>('table');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Helper: translate MGSP station names for display (Cyrillic → Latin in UZ mode)
+  const m = (mgspName: string): string => getMgspDisplayName(mgspName, lang);
 
   React.useEffect(() => {
     if (toast) {
@@ -530,7 +534,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">{t('report_daily')}</h2>
             <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold border border-slate-200 flex items-center gap-1">
-              <Info className="w-3 h-3" /> Без порожних
+              <Info className="w-3 h-3" /> {lang === 'uz' ? "Bo'sh vagonlarsiz" : 'Без порожних'}
             </span>
           </div>
           <p className="text-slate-400 font-medium text-sm mt-1">{t('current_date')}: <span className="text-slate-700 font-bold">{selectedDate}</span></p>
@@ -576,7 +580,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th rowSpan={2} className="px-2 py-3 w-12 text-[10px] uppercase font-bold tracking-wider border border-slate-700">№</th>
-                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold tracking-wider border border-slate-700 min-w-[150px]">{t('mgsp_input')}</th>
+                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold tracking-wider border border-slate-700 min-w-[120px]">{t('mgsp_input')}</th>
                 {[t('taj_bekabad'), t('taj_kudukli'), t('turkmenistan'), t('kazakhstan'), t('kyrgyzstan'), 'Галаба'].map(h => <th key={h} colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-slate-800 border border-slate-700">{h}</th>)}
                 <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-amber-600 border border-amber-700">{t('total_upper')}</th>
                 <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold text-slate-400 border border-slate-700">{t('handover')}</th>
@@ -590,15 +594,15 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {DIR1_ROWS.map((name, i) => (
                 <tr key={name} className="hover:bg-slate-50 transition-colors">
                   <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">{i + 1}</td>
-                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{name}</td>
-                  <Cell data={processedData.transitRows[name].taj_bekabad} onClickLabel={`${name} - ${t('taj_bekabad')}`} />
-                  <Cell data={processedData.transitRows[name].taj_kudukli} onClickLabel={`${name} - ${t('taj_kudukli')}`} />
-                  <Cell data={processedData.transitRows[name].turkmenistan} onClickLabel={`${name} - ${t('turkmenistan')}`} />
-                  <Cell data={processedData.transitRows[name].kazakhstan} onClickLabel={`${name} - ${t('kazakhstan')}`} />
-                  <Cell data={processedData.transitRows[name].kyrgyzstan} onClickLabel={`${name} - ${t('kyrgyzstan')}`} />
-                  <Cell data={processedData.transitRows[name].galaba} onClickLabel={`${name} - Галаба`} />
-                  <Cell data={processedData.transitRows[name].total} onClickLabel={`${name} - ${t('total_upper')}`} isTotal />
-                  <Cell data={processedData.transitRows[name].sdacha} onClickLabel={`${name} - ${t('handover')}`} />
+                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{m(name)}</td>
+                  <Cell data={processedData.transitRows[name].taj_bekabad} onClickLabel={`${m(name)} - ${t('taj_bekabad')}`} />
+                  <Cell data={processedData.transitRows[name].taj_kudukli} onClickLabel={`${m(name)} - ${t('taj_kudukli')}`} />
+                  <Cell data={processedData.transitRows[name].turkmenistan} onClickLabel={`${m(name)} - ${t('turkmenistan')}`} />
+                  <Cell data={processedData.transitRows[name].kazakhstan} onClickLabel={`${m(name)} - ${t('kazakhstan')}`} />
+                  <Cell data={processedData.transitRows[name].kyrgyzstan} onClickLabel={`${m(name)} - ${t('kyrgyzstan')}`} />
+                  <Cell data={processedData.transitRows[name].galaba} onClickLabel={`${m(name)} - ${t('galaba')}`} />
+                  <Cell data={processedData.transitRows[name].total} onClickLabel={`${m(name)} - ${t('total_upper')}`} isTotal />
+                  <Cell data={processedData.transitRows[name].sdacha} onClickLabel={`${m(name)} - ${t('handover')}`} />
                 </tr>
               ))}
               {/* Subtotal 1 */}
@@ -618,15 +622,15 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {DIR2_ROWS.map((name, i) => (
                 <tr key={name} className="hover:bg-slate-50 transition-colors">
                   <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">{i + 1}</td>
-                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{name}</td>
-                  <Cell data={processedData.transitRows[name].taj_bekabad} onClickLabel={`${name} - ${t('taj_bekabad')}`} />
-                  <Cell data={processedData.transitRows[name].taj_kudukli} onClickLabel={`${name} - ${t('taj_kudukli')}`} />
-                  <Cell data={processedData.transitRows[name].turkmenistan} onClickLabel={`${name} - ${t('turkmenistan')}`} />
-                  <Cell data={processedData.transitRows[name].kazakhstan} onClickLabel={`${name} - ${t('kazakhstan')}`} />
-                  <Cell data={processedData.transitRows[name].kyrgyzstan} onClickLabel={`${name} - ${t('kyrgyzstan')}`} />
-                  <Cell data={processedData.transitRows[name].galaba} onClickLabel={`${name} - Галаба`} />
-                  <Cell data={processedData.transitRows[name].total} onClickLabel={`${name} - ${t('total_upper')}`} isTotal />
-                  <Cell data={processedData.transitRows[name].sdacha} onClickLabel={`${name} - ${t('handover')}`} />
+                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{m(name)}</td>
+                  <Cell data={processedData.transitRows[name].taj_bekabad} onClickLabel={`${m(name)} - ${t('taj_bekabad')}`} />
+                  <Cell data={processedData.transitRows[name].taj_kudukli} onClickLabel={`${m(name)} - ${t('taj_kudukli')}`} />
+                  <Cell data={processedData.transitRows[name].turkmenistan} onClickLabel={`${m(name)} - ${t('turkmenistan')}`} />
+                  <Cell data={processedData.transitRows[name].kazakhstan} onClickLabel={`${m(name)} - ${t('kazakhstan')}`} />
+                  <Cell data={processedData.transitRows[name].kyrgyzstan} onClickLabel={`${m(name)} - ${t('kyrgyzstan')}`} />
+                  <Cell data={processedData.transitRows[name].galaba} onClickLabel={`${m(name)} - ${t('galaba')}`} />
+                  <Cell data={processedData.transitRows[name].total} onClickLabel={`${m(name)} - ${t('total_upper')}`} isTotal />
+                  <Cell data={processedData.transitRows[name].sdacha} onClickLabel={`${m(name)} - ${t('handover')}`} />
                 </tr>
               ))}
               {/* Subtotal 2 */}
@@ -648,15 +652,15 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
                   <HeaderRow title={t('other_unknown')} colorClass="text-slate-500" />
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">?</td>
-                    <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">ПРОЧИЕ</td>
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].taj_bekabad} onClickLabel="ПРОЧИЕ - Тадж (Бек)" />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].taj_kudukli} onClickLabel="ПРОЧИЕ - Тадж (Куд)" />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].turkmenistan} onClickLabel="ПРОЧИЕ - Туркм" />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].kazakhstan} onClickLabel="ПРОЧИЕ - Каз" />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].kyrgyzstan} onClickLabel="ПРОЧИЕ - Кирг" />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].galaba} onClickLabel="ПРОЧИЕ - Галаба" />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].total} onClickLabel="ПРОЧИЕ - Всего" isTotal />
-                    <Cell data={processedData.transitRows["ПРОЧИЕ"].sdacha} onClickLabel="ПРОЧИЕ - Сдача" />
+                    <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{m('ПРОЧИЕ')}</td>
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].taj_bekabad} onClickLabel={`${m('ПРОЧИЕ')} - ${t('taj_bekabad')}`} />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].taj_kudukli} onClickLabel={`${m('ПРОЧИЕ')} - ${t('taj_kudukli')}`} />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].turkmenistan} onClickLabel={`${m('ПРОЧИЕ')} - ${t('turkmenistan')}`} />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].kazakhstan} onClickLabel={`${m('ПРОЧИЕ')} - ${t('kazakhstan')}`} />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].kyrgyzstan} onClickLabel={`${m('ПРОЧИЕ')} - ${t('kyrgyzstan')}`} />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].galaba} onClickLabel={`${m('ПРОЧИЕ')} - ${t('galaba')}`} />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].total} onClickLabel={`${m('ПРОЧИЕ')} - ${t('total_upper')}`} isTotal />
+                    <Cell data={processedData.transitRows["ПРОЧИЕ"].sdacha} onClickLabel={`${m('ПРОЧИЕ')} - ${t('handover')}`} />
                   </tr>
                 </>
               )}
@@ -677,8 +681,8 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           </table>
         </div>
 
-        {/* Import Table (Similar Structure) */}
-        <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)]">
+        {/* Import Table (Similar Structure) — page-break-before ensures it prints on a new page */}
+        <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)]" style={{ pageBreakBefore: 'always' }}>
           <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
             <h3 className="text-sm font-bold text-blue-600 uppercase tracking-widest">{t('import_acceptance')}</h3>
           </div>
@@ -686,7 +690,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
             <thead>
               <tr className="bg-slate-900 text-white text-center">
                 <th rowSpan={2} className="px-2 py-3 w-12 text-[10px] uppercase font-bold border border-slate-700">№</th>
-                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold border border-slate-700 min-w-[150px]">{t('mgsp_input')}</th>
+                <th rowSpan={2} className="px-4 py-3 text-left text-[10px] uppercase font-bold border border-slate-700 min-w-[120px]">{t('mgsp_input')}</th>
                 {[1, 2, 3, 4, 5, 6].map(i => `${regionTerm} ${i}`).map(h => <th key={h} colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-slate-800 border border-slate-700">{h}</th>)}
                 <th colSpan={2} className="px-2 py-2 text-[10px] uppercase font-bold bg-blue-600 border border-blue-700">{t('total_upper')}</th>
               </tr>
@@ -698,28 +702,28 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {[...DIR1_ROWS, ...DIR2_ROWS].map((name, i) => (
                 <tr key={name} className="hover:bg-slate-50 transition-colors">
                   <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">{i + 1}</td>
-                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{name}</td>
-                  <Cell data={processedData.importRows[name].mtu1} onClickLabel={`${name} - ${regionTerm} 1`} />
-                  <Cell data={processedData.importRows[name].mtu2} onClickLabel={`${name} - ${regionTerm} 2`} />
-                  <Cell data={processedData.importRows[name].mtu3} onClickLabel={`${name} - ${regionTerm} 3`} />
-                  <Cell data={processedData.importRows[name].mtu4} onClickLabel={`${name} - ${regionTerm} 4`} />
-                  <Cell data={processedData.importRows[name].mtu5} onClickLabel={`${name} - ${regionTerm} 5`} />
-                  <Cell data={processedData.importRows[name].mtu6} onClickLabel={`${name} - ${regionTerm} 6`} />
-                  <Cell data={processedData.importRows[name].total} onClickLabel={`${name} - Total`} isTotal />
+                  <td className="px-4 py-2 font-bold text-slate-700 text-xs border border-slate-300">{m(name)}</td>
+                  <Cell data={processedData.importRows[name].mtu1} onClickLabel={`${m(name)} - ${regionTerm} 1`} />
+                  <Cell data={processedData.importRows[name].mtu2} onClickLabel={`${m(name)} - ${regionTerm} 2`} />
+                  <Cell data={processedData.importRows[name].mtu3} onClickLabel={`${m(name)} - ${regionTerm} 3`} />
+                  <Cell data={processedData.importRows[name].mtu4} onClickLabel={`${m(name)} - ${regionTerm} 4`} />
+                  <Cell data={processedData.importRows[name].mtu5} onClickLabel={`${m(name)} - ${regionTerm} 5`} />
+                  <Cell data={processedData.importRows[name].mtu6} onClickLabel={`${m(name)} - ${regionTerm} 6`} />
+                  <Cell data={processedData.importRows[name].total} onClickLabel={`${m(name)} - ${t('total_upper')}`} isTotal />
                 </tr>
               ))}
               {/* Other for Import */}
               {processedData.importRows["ПРОЧИЕ"].total.wagons > 0 && (
                 <tr className="hover:bg-slate-50 transition-colors border-t border-slate-200">
                   <td className="text-center font-mono text-xs text-slate-400 border border-slate-300 bg-slate-50/50">?</td>
-                  <td className="px-4 py-2 font-bold text-slate-500 text-xs border border-slate-300">ПРОЧИЕ</td>
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu1} onClickLabel={`ПРОЧИЕ - ${regionTerm} 1`} />
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu2} onClickLabel={`ПРОЧИЕ - ${regionTerm} 2`} />
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu3} onClickLabel={`ПРОЧИЕ - ${regionTerm} 3`} />
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu4} onClickLabel={`ПРОЧИЕ - ${regionTerm} 4`} />
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu5} onClickLabel={`ПРОЧИЕ - ${regionTerm} 5`} />
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu6} onClickLabel={`ПРОЧИЕ - ${regionTerm} 6`} />
-                  <Cell data={processedData.importRows["ПРОЧИЕ"].total} onClickLabel="ПРОЧИЕ - Total" isTotal />
+                  <td className="px-4 py-2 font-bold text-slate-500 text-xs border border-slate-300">{m('ПРОЧИЕ')}</td>
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu1} onClickLabel={`${m('ПРОЧИЕ')} - ${regionTerm} 1`} />
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu2} onClickLabel={`${m('ПРОЧИЕ')} - ${regionTerm} 2`} />
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu3} onClickLabel={`${m('ПРОЧИЕ')} - ${regionTerm} 3`} />
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu4} onClickLabel={`${m('ПРОЧИЕ')} - ${regionTerm} 4`} />
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu5} onClickLabel={`${m('ПРОЧИЕ')} - ${regionTerm} 5`} />
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].mtu6} onClickLabel={`${m('ПРОЧИЕ')} - ${regionTerm} 6`} />
+                  <Cell data={processedData.importRows["ПРОЧИЕ"].total} onClickLabel={`${m('ПРОЧИЕ')} - ${t('total_upper')}`} isTotal />
                 </tr>
               )}
 
@@ -899,7 +903,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {DIR1_ROWS.map(name => (
-              <FlowCard key={name} title={name} transitData={processedData.transitRows[name]} importData={processedData.importRows[name]} onOpenModal={() => { }} lang={lang} t={t} />
+              <FlowCard key={name} title={m(name)} transitData={processedData.transitRows[name]} importData={processedData.importRows[name]} onOpenModal={() => { }} lang={lang} t={t} />
             ))}
           </div>
         </div>
@@ -910,7 +914,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
             {DIR2_ROWS.map(name => (
-              <FlowCard key={name} title={name} transitData={processedData.transitRows[name]} importData={processedData.importRows[name]} onOpenModal={() => { }} lang={lang} t={t} />
+              <FlowCard key={name} title={m(name)} transitData={processedData.transitRows[name]} importData={processedData.importRows[name]} onOpenModal={() => { }} lang={lang} t={t} />
             ))}
           </div>
         </div>
@@ -923,7 +927,7 @@ const TransitImportReport: React.FC<Props> = ({ wagons, lang, t, selectedDate })
               {t('other_unknown')}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              <FlowCard key="ПРОЧИЕ" title="ПРОЧИЕ" transitData={processedData.transitRows["ПРОЧИЕ"]} importData={processedData.importRows["ПРОЧИЕ"]} onOpenModal={() => { }} lang={lang} t={t} />
+              <FlowCard key="ПРОЧИЕ" title={m('ПРОЧИЕ')} transitData={processedData.transitRows["ПРОЧИЕ"]} importData={processedData.importRows["ПРОЧИЕ"]} onOpenModal={() => { }} lang={lang} t={t} />
             </div>
           </div>
         )}

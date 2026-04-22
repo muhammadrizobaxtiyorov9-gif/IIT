@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Station, Wagon, RegionName, Language } from '../../types';
-import { getRegionName, getCargoNameTranslated } from '../../utils/translations';
+import { getRegionName, getCargoNameTranslated, getMgspDisplayName, transliterateCyrillicToLatin } from '../../utils/translations';
 import { normalizeMgspName } from '../../utils/stationUtils';
 import StatsCard from './StatsCard';
 import TransitImportReport from '../reports/TransitImportReport';
@@ -45,10 +45,15 @@ const getTrainStats = (wagons: Wagon[], stations: Station[]) => {
       // Ensure arrivalDate is a Date object and handle potential string rehydration
       let wagonDate: Date | undefined = undefined;
       const rawDate = w.datearriveBorderStation || w.arrivalDate || (w as any).ad;
-      if (rawDate) {
-         wagonDate = rawDate instanceof Date ? rawDate : new Date(rawDate);
-         // Check if valid date
-         if (isNaN(wagonDate.getTime())) wagonDate = undefined;
+      if (rawDate && typeof rawDate === 'string' && !rawDate.startsWith('0001-01-01')) {
+         wagonDate = new Date(rawDate);
+      } else if (rawDate instanceof Date) {
+         wagonDate = rawDate;
+      }
+      
+      // Check if valid date and not year 1
+      if (wagonDate && (isNaN(wagonDate.getTime()) || wagonDate.getFullYear() < 2000)) {
+         wagonDate = undefined;
       }
 
       // Keep the earliest arrival date found for the train
@@ -114,18 +119,20 @@ const getTrainStats = (wagons: Wagon[], stations: Station[]) => {
 /**
  * Determines if a train is "Вход" (entry) or "Выход" (exit) based on the first code
  * in the train index (IDX1 in the format TRAINNUM (IDX1+IDX2+IDX3)).
- * - If IDX1 is an Uzbekistan station (72xxx, 73xxx), it's "exit" (train is leaving UZ)
+ * - If IDX1 is an Uzbekistan station (dor === 73), it's "exit" (train is leaving UZ)
  * - If IDX1 is a foreign/border station, it's "entry" (train is coming into UZ)
  */
-const getTrainDirection = (trainIndex: string): 'entry' | 'exit' | 'unknown' => {
+const getTrainDirection = (trainIndex: string, stations: Station[]): 'entry' | 'exit' | 'unknown' => {
    const match = trainIndex.match(/\(\s*(\d{3,6})\s*\+/);
    if (!match) return 'unknown';
    
    const idx1 = match[1];
-   const prefix2 = parseInt(idx1.substring(0, 2), 10);
+   const prefix4 = idx1.substring(0, 4);
    
-   // Uzbekistan station codes start with 72 or 73
-   if (prefix2 === 72 || prefix2 === 73) {
+   // Check if the originating station belongs to Uzbekistan Railways (dor === 73)
+   const foundStation = stations.find(s => s.fullCode.startsWith(prefix4));
+   
+   if (foundStation && foundStation.dor === 73) {
       return 'exit'; // Train originates from UZ = Выход (сдача)
    }
    
@@ -184,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
          // 0. Direction Filter (Вход / Выход)
          if (filterDirection !== 'all') {
             const idx = (w.trainIndex || '').trim();
-            const direction = getTrainDirection(idx);
+            const direction = getTrainDirection(idx, stations);
             if (direction !== filterDirection) return false;
          }
 
@@ -273,10 +280,10 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
    const trainDirectionMap = useMemo(() => {
       const map: Record<string, 'entry' | 'exit' | 'unknown'> = {};
       Object.keys(trainStats).forEach(idx => {
-         map[idx] = getTrainDirection(idx);
+         map[idx] = getTrainDirection(idx, stations);
       });
       return map;
-   }, [trainStats]);
+   }, [trainStats, stations]);
 
    // Direction counts
    const directionCounts = useMemo(() => {
@@ -452,9 +459,9 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                               value={filterEntryPoint}
                               onChange={(e) => setFilterEntryPoint(e.target.value)}
                            >
-                              <option value="all">{lang === 'uz' ? 'Barcha Stiklar' : 'Все Стыки'}</option>
+                              <option value="all">{lang === 'uz' ? "Barcha Stiklar" : 'Все Стыки'}</option>
                               {uniqueEntryPoints.map(ep => (
-                                 <option key={ep} value={ep}>{ep}</option>
+                                 <option key={ep} value={ep}>{getMgspDisplayName(ep, lang)}</option>
                               ))}
                            </select>
                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -591,11 +598,11 @@ const Dashboard: React.FC<DashboardProps> = ({ stations, wagons, trainCount, lan
                                           <div className="flex gap-1 flex-col items-end">
                                              {entryPointName && (
                                                 <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wide ${isSelected ? 'bg-blue-500 text-blue-100' : 'bg-slate-100 text-slate-500'}`}>
-                                                   {entryPointName}
+                                                   {getMgspDisplayName(entryPointName, lang)}
                                                 </span>
                                              )}
                                              <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wide ${isSelected ? 'bg-blue-400 text-blue-50' : 'bg-blue-50 text-blue-600'}`}>
-                                                {stats.mainDestination}
+                                                {lang === 'uz' ? transliterateCyrillicToLatin(stats.mainDestination) : stats.mainDestination}
                                              </span>
                                           </div>
                                        </div>

@@ -568,7 +568,7 @@ const App: React.FC = () => {
       setLoading(true);
       setLoadingStatus(`API дан маълумотлар тортилмоқда (${selectedDate})...`);
       
-      const API_BASE = (import.meta as any).env.VITE_API_URL || 'http://localhost:3000/api';
+      const API_BASE = (import.meta as any).env.VITE_API_URL || '/api';
       const toastId = toast.loading(`API сўров юборилди: ${selectedDate}`);
       
       try {

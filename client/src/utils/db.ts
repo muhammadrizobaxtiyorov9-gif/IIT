@@ -10,7 +10,7 @@ import { logger } from './logger'; // Import logger
 
 // --- CONFIGURATION FROM .ENV ---
 // @ts-ignore: Vite env object
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+export const API_URL = import.meta.env.VITE_API_URL || '/api';
 // @ts-ignore: Vite env object
 const USE_LOCAL_BACKEND = import.meta.env.VITE_USE_LOCAL_BACKEND !== 'false'; // Default to true if undefined
 
@@ -620,11 +620,11 @@ export const deleteTrainFromReport = async (date: string, trainIndex: string, de
 
   try {
     if (USE_LOCAL_BACKEND) {
-      const res = await fetch(`${API_URL}/reports/${cleanDate}`);
+      const res = await fetchWithAuth(`${API_URL}/reports/${cleanDate}`);
       if (res.ok) {
         const data = await res.json();
         const updatedWagons = (data.wagons || []).filter((w: any) => normalize(w.ti || w.trainIndex) !== targetIndex);
-        await fetch(`${API_URL}/reports/${cleanDate}`, {
+        await fetchWithAuth(`${API_URL}/reports/${cleanDate}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: safeStringify({ ...data, wagons: updatedWagons })
@@ -658,7 +658,7 @@ export const deleteReport = async (date: string, username?: string): Promise<{ s
 
   try {
     if (USE_LOCAL_BACKEND) {
-      const res = await fetch(`${API_URL}/reports/${cleanDate}`, { method: 'DELETE' });
+      const res = await fetchWithAuth(`${API_URL}/reports/${cleanDate}`, { method: 'DELETE' });
       if (!res.ok) throw new Error("Backend delete failed");
     } else if (db) {
       await withTimeout(deleteDoc(doc(db, "reports", cleanDate)));
@@ -703,7 +703,11 @@ export const saveMapSettings = async (mapPoints: MapPoint[], mtuRegions: MtuRegi
   try {
     const cleanPayload = deepClean(payload);
     if (USE_LOCAL_BACKEND) {
-      await fetch(`${API_URL}/settings`, { method: 'POST', body: safeStringify(cleanPayload) });
+      await fetchWithAuth(`${API_URL}/settings`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: safeStringify(cleanPayload) 
+      });
     } else if (db) {
       setDoc(doc(db, "settings", "map_config"), cleanPayload).catch(() => { });
     }
